@@ -269,6 +269,8 @@ void initializeBBVectorizePass(PassRegistry&);
 void initializeMachineFunctionPrinterPassPass(PassRegistry&);
 void initializeStackMapLivenessPass(PassRegistry&);
 void initializeExpandCtorsPass(PassRegistry&); // @LOCALMOD
+void initializeExpandTlsPass(PassRegistry&); // @LOCALMOD
+void initializeExpandTlsConstantExprPass(PassRegistry&); // @LOCALMOD
 }
 
 #endif
