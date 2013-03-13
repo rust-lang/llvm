@@ -15,6 +15,7 @@
 
 
 #include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/NaCl.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
@@ -57,6 +58,14 @@ static cl::opt<unsigned>
 TimeCompilations("time-compilations", cl::Hidden, cl::init(1u),
                  cl::value_desc("N"),
                  cl::desc("Repeat compilation N times for timing"));
+static cl::opt<bool>
+PNaClABIVerify("pnaclabi-verify",
+  cl::desc("Verify PNaCl bitcode ABI before translating"),
+  cl::init(false));
+static cl::opt<bool>
+PNaClABIVerifyFatalErrors("pnaclabi-verify-fatal-errors",
+  cl::desc("PNaCl ABI verification errors are fatal"),
+  cl::init(false));
 
 // Determine optimization level.
 static cl::opt<char>
@@ -199,6 +208,20 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+// @LOCALMOD-BEGIN
+static void CheckABIVerifyErrors(PNaClABIErrorReporter &Reporter,
+                                 const Twine &Name) {
+  if (PNaClABIVerify && Reporter.getErrorCount() > 0) {
+    errs() << (PNaClABIVerifyFatalErrors ? "ERROR:" : "WARNING:");
+    errs() << Name << " is not valid PNaCl bitcode:\n";
+    Reporter.printErrors(errs());
+    if (PNaClABIVerifyFatalErrors)
+      exit(1);
+  }
+  Reporter.reset();
+}
+// @LOCALMOD-END
+
 static int compileModule(char **argv, LLVMContext &Context) {
   // Load the module to be compiled...
   SMDiagnostic Err;
@@ -209,6 +232,8 @@ static int compileModule(char **argv, LLVMContext &Context) {
   bool SkipModule = MCPU == "help" ||
                     (!MAttrs.empty() && MAttrs.front() == "help");
 
+  PNaClABIErrorReporter ABIErrorReporter; // @LOCALMOD
+
   // If user just wants to list available options, skip module loading
   if (!SkipModule) {
     M.reset(ParseIRFile(InputFilename, Err, Context));
@@ -218,6 +243,12 @@ static int compileModule(char **argv, LLVMContext &Context) {
       return 1;
     }
 
+    if (PNaClABIVerify) {
+      // Verify the module (but not the functions yet)
+      ModulePass *VerifyPass = createPNaClABIVerifyModulePass(&ABIErrorReporter);
+      VerifyPass->runOnModule(*mod);
+      CheckABIVerifyErrors(ABIErrorReporter, "Module");
+    }
     // If we are supposed to override the target triple, do so now.
     if (!TargetTriple.empty())
       mod->setTargetTriple(Triple::normalize(TargetTriple));
@@ -305,6 +336,13 @@ static int compileModule(char **argv, LLVMContext &Context) {
   // Build up all of the passes that we want to do to the module.
   PassManager PM;
 
+  // Add the ABI verifier pass before the analysis and code emission passes.
+  FunctionPass *FunctionVerifyPass = NULL;
+  if (PNaClABIVerify) {
+    FunctionVerifyPass = createPNaClABIVerifyFunctionsPass(&ABIErrorReporter);
+    PM->add(FunctionVerifyPass);
+  }
+
   // Add an appropriate TargetLibraryInfo pass for the module's triple.
   TargetLibraryInfo *TLI = new TargetLibraryInfo(TheTriple);
   if (DisableSimplifyLibCalls)
@@ -328,6 +366,8 @@ static int compileModule(char **argv, LLVMContext &Context) {
       Target.setMCRelaxAll(true);
   }
 
+
+        CheckABIVerifyErrors(ABIErrorReporter, "Function " + I->getName());
   {
     formatted_raw_ostream FOS(Out->os());
 
@@ -363,6 +403,7 @@ static int compileModule(char **argv, LLVMContext &Context) {
     cl::PrintOptionValues();
 
     PM.run(*mod);
+        CheckABIVerifyErrors(ABIErrorReporter, "Function " + I->getName());
   }
 
   // Declare success.
