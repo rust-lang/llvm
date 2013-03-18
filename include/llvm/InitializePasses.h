@@ -268,11 +268,15 @@ void initializeSLPVectorizerPass(PassRegistry&);
 void initializeBBVectorizePass(PassRegistry&);
 void initializeMachineFunctionPrinterPassPass(PassRegistry&);
 void initializeStackMapLivenessPass(PassRegistry&);
-void initializeExpandConstantExprPass(PassRegistry&); // @LOCALMOD
-void initializeExpandCtorsPass(PassRegistry&); // @LOCALMOD
-void initializeExpandTlsPass(PassRegistry&); // @LOCALMOD
-void initializeExpandTlsConstantExprPass(PassRegistry&); // @LOCALMOD
-void initializeNaClCcRewritePass(PassRegistry&); // @LOCALMOD
+// @LOCALMOD-BEGIN
+void initializeExpandConstantExprPass(PassRegistry&);
+void initializeExpandCtorsPass(PassRegistry&);
+void initializeExpandTlsPass(PassRegistry&);
+void initializeExpandTlsConstantExprPass(PassRegistry&);
+void initializeNaClCcRewritePass(PassRegistry&);
+void initializePNaClABIVerifyModulePass(PassRegistry&);
+void initializePNaClABIVerifyFunctionsPass(PassRegistry&);
+// @LOCALMOD-END
 }
 
 #endif
