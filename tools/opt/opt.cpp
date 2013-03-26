@@ -424,6 +424,7 @@ int main(int argc, char **argv) {
   // @LOCALMOD-BEGIN
   initializeExpandConstantExprPass(Registry);
   initializeExpandCtorsPass(Registry);
+  initializeExpandGetElementPtrPass(Registry);
   initializeExpandTlsPass(Registry);
   initializeExpandTlsConstantExprPass(Registry);
   initializeExpandVarArgsPass(Registry);

@@ -271,6 +271,7 @@ void initializeStackMapLivenessPass(PassRegistry&);
 // @LOCALMOD-BEGIN
 void initializeExpandConstantExprPass(PassRegistry&);
 void initializeExpandCtorsPass(PassRegistry&);
+void initializeExpandGetElementPtrPass(PassRegistry&);
 void initializeExpandTlsConstantExprPass(PassRegistry&);
 void initializeExpandTlsPass(PassRegistry&);
 void initializeExpandVarArgsPass(PassRegistry&);
