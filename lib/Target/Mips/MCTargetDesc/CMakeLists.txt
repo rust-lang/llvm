@@ -6,4 +6,7 @@ add_llvm_library(LLVMMipsDesc
   MipsMCTargetDesc.cpp
   MipsELFObjectWriter.cpp
   MipsTargetStreamer.cpp
+# LOCALMOD-BEGIN
+  MipsMCNaCl.cpp
+# LOCALMOD-END
   )
