@@ -428,6 +428,7 @@ int main(int argc, char **argv) {
   initializeExpandTlsPass(Registry);
   initializeExpandTlsConstantExprPass(Registry);
   initializeExpandVarArgsPass(Registry);
+  initializeFlattenGlobalsPass(Registry);
   initializeGlobalCleanupPass(Registry);
   initializePNaClABIVerifyFunctionsPass(Registry);
   initializePNaClABIVerifyModulePass(Registry);
