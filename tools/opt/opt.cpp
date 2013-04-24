@@ -422,6 +422,7 @@ int main(int argc, char **argv) {
   initializeInstrumentation(Registry);
   initializeTarget(Registry);
   // @LOCALMOD-BEGIN
+  initializeExpandByValPass(Registry);
   initializeExpandConstantExprPass(Registry);
   initializeExpandCtorsPass(Registry);
   initializeExpandGetElementPtrPass(Registry);
