@@ -1,4 +1,4 @@
-;===- ./tools/LLVMBuild.txt ------------------------------------*- Conf -*--===;
+;===- ./lib/Bitcode/NaCl/LLVMBuild.txt ------------------------*- Conf -*--===;
 ;
 ;                     The LLVM Compiler Infrastructure
 ;
@@ -16,9 +16,9 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = bugpoint llc lli llvm-ar llvm-as llvm-bcanalyzer llvm-cov llvm-diff llvm-dis llvm-dwarfdump llvm-extract llvm-jitlistener llvm-link llvm-lto llvm-mc llvm-nm llvm-objdump llvm-rtdyld llvm-size macho-dump opt llvm-mcmarkup pnacl-abicheck pnacl-freeze
+subdirectories = Writer
 
 [component_0]
 type = Group
-name = Tools
-parent = $ROOT
+name = NaClBitcode
+parent = Bitcode

@@ -39,6 +39,7 @@ add_llvm_tool_subdirectory(llvm-mcmarkup)
 
 add_llvm_tool_subdirectory(llvm-symbolizer)
 add_subdirectory(pnacl-abicheck)
+add_subdirectory(pnacl-freeze)
 
 add_llvm_tool_subdirectory(llvm-c-test)
 
