@@ -431,6 +431,7 @@ int main(int argc, char **argv) {
   initializeExpandVarArgsPass(Registry);
   initializeFlattenGlobalsPass(Registry);
   initializeGlobalCleanupPass(Registry);
+  initializeInsertDivideCheckPass(Registry);
   initializePNaClABIVerifyFunctionsPass(Registry);
   initializePNaClABIVerifyModulePass(Registry);
   initializeResolveAliasesPass(Registry);
