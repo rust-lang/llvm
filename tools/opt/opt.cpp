@@ -434,6 +434,7 @@ int main(int argc, char **argv) {
   initializeInsertDivideCheckPass(Registry);
   initializePNaClABIVerifyFunctionsPass(Registry);
   initializePNaClABIVerifyModulePass(Registry);
+  initializePromoteIntegersPass(Registry);
   initializeResolveAliasesPass(Registry);
   initializeStripMetadataPass(Registry);
   // @LOCALMOD-END
