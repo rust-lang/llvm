@@ -511,6 +511,33 @@ def int_convertus  : Intrinsic<[llvm_anyint_ty],
 def int_convertuu  : Intrinsic<[llvm_anyint_ty],
                                [llvm_anyint_ty, llvm_i32_ty, llvm_i32_ty]>;
 
+// @LOCALMOD-BEGIN
+//===----------------------- Native Client Intrinsics ---------------------===//
+// NaCl-specific setjmp/longjmp intrinsics.
+// See https://code.google.com/p/nativeclient/issues/detail?id=3429
+def int_nacl_setjmp   : Intrinsic<[llvm_i32_ty],  [llvm_ptr_ty]>;
+def int_nacl_longjmp  : Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty],
+                                  [IntrNoReturn]>;
+
+// Fast built-in version of NaCl's tls_get() IRT interface.
+def int_nacl_read_tp : Intrinsic<[llvm_ptr_ty], [], [IntrNoMem]>;
+
+// The following intrinsics provide target-specific implementations of
+// the interface in native_client/src/untrusted/nacl/tls_params.h.
+// The intrinsic names are basically the functions there without the
+// leading underscores.
+def int_nacl_tp_tls_offset : Intrinsic<[llvm_i32_ty], [llvm_i32_ty]>,
+                             GCCBuiltin<"__builtin_nacl_tp_tls_offset">;
+def int_nacl_tp_tdb_offset : Intrinsic<[llvm_i32_ty], [llvm_i32_ty]>,
+                             GCCBuiltin<"__builtin_nacl_tp_tdb_offset">;
+
+// The following intrinsic provides a target-specific constant value to
+// indicate the target platform compiled to.  The enum values are enumerated
+// pnaclintrin.h.
+def int_nacl_target_arch : Intrinsic<[llvm_i32_ty], []>,
+                            GCCBuiltin<"__builtin_nacl_target_arch">;
+// @LOCALMOD-END
+
 //===----------------------------------------------------------------------===//
 // Target-specific intrinsics
 //===----------------------------------------------------------------------===//
