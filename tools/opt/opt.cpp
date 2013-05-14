@@ -436,6 +436,7 @@ int main(int argc, char **argv) {
   initializePNaClABIVerifyModulePass(Registry);
   initializePromoteIntegersPass(Registry);
   initializeResolveAliasesPass(Registry);
+  initializeRewritePNaClLibraryCallsPass(Registry);
   initializeStripMetadataPass(Registry);
   // @LOCALMOD-END
 
