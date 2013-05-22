@@ -283,6 +283,7 @@ void initializeNaClCcRewritePass(PassRegistry&);
 void initializePNaClABIVerifyModulePass(PassRegistry&);
 void initializePNaClABIVerifyFunctionsPass(PassRegistry&);
 void initializePromoteIntegersPass(PassRegistry&);
+void initializeReplacePtrsWithIntsPass(PassRegistry&);
 void initializeResolveAliasesPass(PassRegistry&);
 void initializeRewritePNaClLibraryCallsPass(PassRegistry&);
 void initializeStripMetadataPass(PassRegistry&);

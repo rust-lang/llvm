@@ -435,6 +435,7 @@ int main(int argc, char **argv) {
   initializePNaClABIVerifyFunctionsPass(Registry);
   initializePNaClABIVerifyModulePass(Registry);
   initializePromoteIntegersPass(Registry);
+  initializeReplacePtrsWithIntsPass(Registry);
   initializeResolveAliasesPass(Registry);
   initializeRewritePNaClLibraryCallsPass(Registry);
   initializeStripMetadataPass(Registry);
