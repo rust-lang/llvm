@@ -15,7 +15,7 @@
 
 
 #include "llvm/ADT/Triple.h"
-#include "llvm/Analysis/NaCl.h"
+#include "llvm/Analysis/NaCl.h" // @LOCALMOD
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
@@ -32,6 +32,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
+#include "llvm/Transforms/NaCl.h" // @LOCALMOD
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
@@ -249,10 +250,24 @@ static int compileModule(char **argv, LLVMContext &Context) {
       VerifyPass->runOnModule(*mod);
       CheckABIVerifyErrors(ABIErrorReporter, "Module");
     }
+
     // If we are supposed to override the target triple, do so now.
     if (!TargetTriple.empty())
       mod->setTargetTriple(Triple::normalize(TargetTriple));
     TheTriple = Triple(mod->getTargetTriple());
+
+    // @LOCALMOD-BEGIN
+    // Add declarations for external functions required by PNaCl. The
+    // ResolvePNaClIntrinsics function pass running during streaming
+    // depends on these declarations being in the module.
+    if (TheTriple.isOSNaCl()) {
+      // TODO(eliben): pnacl-llc presumably won't need the isOSNaCl
+      // test.
+      OwningPtr<ModulePass> AddPNaClExternalDeclsPass(
+          createAddPNaClExternalDeclsPass());
+      AddPNaClExternalDeclsPass->runOnModule(*mod);
+    }
+    // @LOCALMOD-END
   } else {
     TheTriple = Triple(Triple::normalize(TargetTriple));
   }
@@ -342,6 +357,12 @@ static int compileModule(char **argv, LLVMContext &Context) {
     FunctionVerifyPass = createPNaClABIVerifyFunctionsPass(&ABIErrorReporter);
     PM->add(FunctionVerifyPass);
   }
+
+  if (TheTriple.isOSNaCl()) {
+    // Add the intrinsic resolution pass. It assumes ABI-conformant code.
+    PM->add(createResolvePNaClIntrinsicsPass());
+  }
+
 
   // Add an appropriate TargetLibraryInfo pass for the module's triple.
   TargetLibraryInfo *TLI = new TargetLibraryInfo(TheTriple);

@@ -435,6 +435,7 @@ int main(int argc, char **argv) {
   initializeInstrumentation(Registry);
   initializeTarget(Registry);
   // @LOCALMOD-BEGIN
+  initializeAddPNaClExternalDeclsPass(Registry);
   initializeExpandByValPass(Registry);
   initializeExpandConstantExprPass(Registry);
   initializeExpandCtorsPass(Registry);
@@ -451,6 +452,7 @@ int main(int argc, char **argv) {
   initializePromoteIntegersPass(Registry);
   initializeReplacePtrsWithIntsPass(Registry);
   initializeResolveAliasesPass(Registry);
+  initializeResolvePNaClIntrinsicsPass(Registry);
   initializeRewritePNaClLibraryCallsPass(Registry);
   initializeStripMetadataPass(Registry);
   // @LOCALMOD-END
