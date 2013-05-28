@@ -270,11 +270,11 @@ void initializeMachineFunctionPrinterPassPass(PassRegistry&);
 void initializeStackMapLivenessPass(PassRegistry&);
 // @LOCALMOD-BEGIN
 void initializeAddPNaClExternalDeclsPass(PassRegistry&);
+void initializeExpandArithWithOverflowPass(PassRegistry&);
 void initializeExpandByValPass(PassRegistry&);
 void initializeExpandConstantExprPass(PassRegistry&);
 void initializeExpandCtorsPass(PassRegistry&);
 void initializeExpandGetElementPtrPass(PassRegistry&);
-void initializeExpandMulWithOverflowPass(PassRegistry&);
 void initializeExpandTlsConstantExprPass(PassRegistry&);
 void initializeExpandTlsPass(PassRegistry&);
 void initializeExpandVarArgsPass(PassRegistry&);
