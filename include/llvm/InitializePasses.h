@@ -275,6 +275,7 @@ void initializeExpandByValPass(PassRegistry&);
 void initializeExpandConstantExprPass(PassRegistry&);
 void initializeExpandCtorsPass(PassRegistry&);
 void initializeExpandGetElementPtrPass(PassRegistry&);
+void initializeExpandSmallArgumentsPass(PassRegistry&);
 void initializeExpandTlsConstantExprPass(PassRegistry&);
 void initializeExpandTlsPass(PassRegistry&);
 void initializeExpandVarArgsPass(PassRegistry&);
