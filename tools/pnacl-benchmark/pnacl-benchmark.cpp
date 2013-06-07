@@ -204,8 +204,10 @@ void BenchmarkIRParsing() {
   {
     TimingOperationBlock T("LLVM IR parsing", BufSize);
     SMDiagnostic Err;
-    Module *M = NaClParseIRFile(InputFilename, PNaClFormat,
-                                Err, getGlobalContext());
+    Module *M = ParseIRFile(InputFilename,
+                            Err,
+                            getGlobalContext(),
+                            PNaClFormat);
 
     if (!M) {
       report_fatal_error("Unable to NaClParseIRFile");

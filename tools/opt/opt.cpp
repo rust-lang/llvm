@@ -201,8 +201,7 @@ DefaultDataLayout("default-data-layout",
           cl::desc("data layout string to use if not specified by module"),
           cl::value_desc("layout-string"), cl::init(""));
 
-// @LOCALMOD-BEGIN
-static cl::opt<NaClFileFormat>
+static cl::opt<FileFormat>
 OutputFileFormat(
     "bitcode-format",
     cl::desc("Define format of generated bitcode file:"),
@@ -211,7 +210,7 @@ OutputFileFormat(
         clEnumValN(PNaClFormat, "pnacl", "PNaCl bitcode file"),
         clEnumValEnd),
     cl::init(LLVMFormat));
-// @LOCALMOD-END
+
 namespace {
 
 struct BreakpointPrinter : public ModulePass {

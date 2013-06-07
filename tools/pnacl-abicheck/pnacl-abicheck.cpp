@@ -30,7 +30,7 @@ InputFilename(cl::Positional, cl::desc("<input bitcode>"), cl::init("-"));
 static cl::opt<bool>
 Quiet("q", cl::desc("Do not print error messages"));
 
-static cl::opt<NaClFileFormat>
+static cl::opt<FileFormat>
 InputFileFormat(
     "bitcode-format",
     cl::desc("Define format of input file:"),
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv, "PNaCl Bitcode ABI checker\n");
 
   OwningPtr<Module> Mod(
-      NaClParseIRFile(InputFilename, InputFileFormat, Err, Context));
+      ParseIRFile(InputFilename, Err, Context, InputFileFormat));
   if (Mod.get() == 0) {
     Err.print(argv[0], errs());
     return 1;
