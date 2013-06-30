@@ -436,6 +436,7 @@ int main(int argc, char **argv) {
   initializeTarget(Registry);
   // @LOCALMOD-BEGIN
   initializeAddPNaClExternalDeclsPass(Registry);
+  initializeCanonicalizeMemIntrinsicsPass(Registry);
   initializeExpandArithWithOverflowPass(Registry);
   initializeExpandByValPass(Registry);
   initializeExpandConstantExprPass(Registry);
