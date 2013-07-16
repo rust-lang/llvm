@@ -21,6 +21,10 @@
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/RegionPass.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
+#include "llvm/Analysis/Verifier.h"
+#include "llvm/Assembly/PrintModulePass.h"
+#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/NaCl/NaClReaderWriter.h" // @LOCALMOD
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/DebugInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -197,6 +201,17 @@ DefaultDataLayout("default-data-layout",
           cl::desc("data layout string to use if not specified by module"),
           cl::value_desc("layout-string"), cl::init(""));
 
+// @LOCALMOD-BEGIN
+static cl::opt<NaClFileFormat>
+OutputFileFormat(
+    "bitcode-format",
+    cl::desc("Define format of generated bitcode file:"),
+    cl::values(
+        clEnumValN(LLVMFormat, "llvm", "LLVM bitcode file (default)"),
+        clEnumValN(PNaClFormat, "pnacl", "PNaCl bitcode file"),
+        clEnumValEnd),
+    cl::init(LLVMFormat));
+// @LOCALMOD-END
 namespace {
 
 struct BreakpointPrinter : public ModulePass {
@@ -755,6 +770,23 @@ int main(int argc, char **argv) {
 
   // Now that we have all of the passes ready, run them.
   Passes.run(*M.get());
+
+// @LOCALMOD-BEGIN
+  // Write bitcode to the output.
+  if (!NoOutput && !AnalyzeOnly && !OutputAssembly) {
+    switch (OutputFileFormat) {
+      case LLVMFormat:
+        WriteBitcodeToFile(M.get(), Out->os());
+        break;
+      case PNaClFormat:
+        NaClWriteBitcodeToFile(M.get(), Out->os());
+        break;
+      default:
+        errs() << "Don't understand bitcode format for generated bitcode.\n";
+        return 1;
+    }
+  }
+// @LOCALMOD-END
 
   // Declare success.
   if (!NoOutput || PrintBreakpoints)
