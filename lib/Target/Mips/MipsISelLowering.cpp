@@ -376,6 +376,7 @@ MipsTargetLowering(MipsTargetMachine &TM)
   }
 
   setOperationAction(ISD::TRAP, MVT::Other, Legal);
+    setOperationAction(ISD::NACL_TARGET_ARCH,          MVT::i32, Custom);
 
   setTargetDAGCombine(ISD::SDIVREM);
   setTargetDAGCombine(ISD::UDIVREM);
@@ -788,6 +789,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
   case ISD::STORE:              return lowerSTORE(Op, DAG);
   case ISD::ADD:                return lowerADD(Op, DAG);
   case ISD::FP_TO_SINT:         return lowerFP_TO_SINT(Op, DAG);
+  case ISD::NACL_TARGET_ARCH:   return LowerNaClTargetArch(Op, DAG);
   }
   return SDValue();
 }
@@ -1534,6 +1536,15 @@ SDValue MipsTargetLowering::lowerBlockAddress(SDValue Op,
     return getAddrNonPIC(N, Ty, DAG);
 
   return getAddrLocal(N, Ty, DAG, HasMips64);
+}
+
+SDValue
+MipsTargetLowering::LowerNaClTargetArch(SDValue Op, SelectionDAG &DAG) const {
+  // size_t __nacl_target_arch () {
+  //   return PnaclTargetArchitectureMips_32;
+  // }
+  return DAG.getConstant(PnaclTargetArchitectureMips_32,
+                         Op.getValueType().getSimpleVT());
 }
 
 SDValue MipsTargetLowering::

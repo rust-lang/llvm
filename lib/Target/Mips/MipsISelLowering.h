@@ -516,6 +516,7 @@ namespace llvm {
     void writeVarArgRegs(std::vector<SDValue> &OutChains, const MipsCC &CC,
                          SDValue Chain, SDLoc DL, SelectionDAG &DAG) const;
 
+    SDValue LowerNaClTargetArch(SDValue Op, SelectionDAG &DAG) const;
     virtual SDValue
       LowerFormalArguments(SDValue Chain,
                            CallingConv::ID CallConv, bool isVarArg,
