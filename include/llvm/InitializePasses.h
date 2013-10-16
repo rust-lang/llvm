@@ -287,6 +287,7 @@ void initializeInsertDivideCheckPass(PassRegistry&);
 void initializeNaClCcRewritePass(PassRegistry&);
 void initializePNaClABIVerifyFunctionsPass(PassRegistry&);
 void initializePNaClABIVerifyModulePass(PassRegistry&);
+void initializePNaClSjLjEHPass(PassRegistry&);
 void initializePromoteI1OpsPass(PassRegistry&);
 void initializePromoteIntegersPass(PassRegistry&);
 void initializeRemoveAsmMemoryPass(PassRegistry&);
