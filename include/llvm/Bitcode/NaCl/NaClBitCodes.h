@@ -184,7 +184,7 @@ template <> struct isPodLike<NaClBitCodeAbbrevOp> {
 /// abbreviation allows a complex record that has redundancy to be stored in a
 /// specialized format instead of the fully-general, fully-vbr, format.
 class NaClBitCodeAbbrev {
-  SmallVector<NaClBitCodeAbbrevOp, 32> OperandList;
+  SmallVector<NaClBitCodeAbbrevOp, 8> OperandList;
   unsigned char RefCount; // Number of things using this.
   ~NaClBitCodeAbbrev() {}
 public:

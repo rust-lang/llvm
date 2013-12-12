@@ -42,6 +42,7 @@ add_llvm_tool_subdirectory(llvm-symbolizer)
 add_llvm_tool_subdirectory(pnacl-abicheck)
 add_llvm_tool_subdirectory(pnacl-bcanalyzer)
 add_llvm_tool_subdirectory(pnacl-freeze)
+add_llvm_tool_subdirectory(pnacl-bccompress)
 add_llvm_tool_subdirectory(pnacl-thaw)
 
 add_llvm_tool_subdirectory(llvm-c-test)
