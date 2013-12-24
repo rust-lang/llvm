@@ -29,6 +29,7 @@
 #ifndef LLVM_PASS_H
 #define LLVM_PASS_H
 
+#include "llvm/PassRegistry.h"
 #include "llvm/Support/Compiler.h"
 #include <string>
 
@@ -82,12 +83,13 @@ enum PassKind {
 class Pass {
   AnalysisResolver *Resolver;  // Used to resolve analysis
   const void *PassID;
+  mutable const PassInfo *PI;
   PassKind Kind;
   void operator=(const Pass&) LLVM_DELETED_FUNCTION;
   Pass(const Pass &) LLVM_DELETED_FUNCTION;
 
 public:
-  explicit Pass(PassKind K, char &pid) : Resolver(0), PassID(&pid), Kind(K) { }
+  explicit Pass(PassKind K, char &pid) : Resolver(0), PassID(&pid), PI(0), Kind(K) { }
   virtual ~Pass();
 
 
@@ -102,6 +104,13 @@ public:
   /// getPassID - Return the PassID number that corresponds to this pass.
   AnalysisID getPassID() const {
     return PassID;
+  }
+
+  /// getPassInfo - Return the PassInfo associated with this pass.
+  const PassInfo *getPassInfo() const {
+    if (!PI)
+      PI = PassRegistry::getPassRegistry()->getPassInfo(PassID);
+    return PI;
   }
 
   /// doInitialization - Virtual method overridden by subclasses to do
