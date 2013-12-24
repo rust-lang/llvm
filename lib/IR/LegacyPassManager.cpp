@@ -607,8 +607,7 @@ void PMTopLevelManager::schedulePass(Pass *P) {
   // If P is an analysis pass and it is available then do not
   // generate the analysis again. Stale analysis info should not be
   // available at this point.
-  const PassInfo *PI =
-    PassRegistry::getPassRegistry()->getPassInfo(P->getPassID());
+  const PassInfo *PI = P->getPassInfo();
   if (PI && PI->isAnalysis() && findAnalysisPass(P->getPassID())) {
     delete P;
     return;
@@ -723,8 +722,7 @@ Pass *PMTopLevelManager::findAnalysisPass(AnalysisID AID) {
       return *I;
 
     // If Pass not found then check the interfaces implemented by Immutable Pass
-    const PassInfo *PassInf =
-      PassRegistry::getPassRegistry()->getPassInfo(PI);
+    const PassInfo *PassInf = (*I)->getPassInfo();
     assert(PassInf && "Expected all immutable passes to be initialized");
     const std::vector<const PassInfo*> &ImmPI =
       PassInf->getInterfacesImplemented();
@@ -766,8 +764,7 @@ void PMTopLevelManager::dumpArguments() const {
   dbgs() << "Pass Arguments: ";
   for (SmallVectorImpl<ImmutablePass *>::const_iterator I =
        ImmutablePasses.begin(), E = ImmutablePasses.end(); I != E; ++I)
-    if (const PassInfo *PI =
-        PassRegistry::getPassRegistry()->getPassInfo((*I)->getPassID())) {
+    if (const PassInfo *PI = (*I)->getPassInfo()) {
       assert(PI && "Expected all immutable passes to be initialized");
       if (!PI->isAnalysisGroup())
         dbgs() << " -" << PI->getPassArgument();
@@ -831,8 +828,8 @@ void PMDataManager::recordAvailableAnalysis(Pass *P) {
 
   // This pass is the current implementation of all of the interfaces it
   // implements as well.
-  const PassInfo *PInf = PassRegistry::getPassRegistry()->getPassInfo(PI);
-  if (!PInf) return;
+  const PassInfo *PInf = P->getPassInfo();
+  if (PInf == 0) return;
   const std::vector<const PassInfo*> &II = PInf->getInterfacesImplemented();
   for (unsigned i = 0, e = II.size(); i != e; ++i)
     AvailableAnalysis[II[i]->getTypeInfo()] = P;
@@ -963,10 +960,9 @@ void PMDataManager::freePass(Pass *P, StringRef Msg,
     P->releaseMemory();
   }
 
-  AnalysisID PI = P->getPassID();
-  if (const PassInfo *PInf = PassRegistry::getPassRegistry()->getPassInfo(PI)) {
+  if (const PassInfo *PInf = P->getPassInfo()) {
     // Remove the pass itself (if it is not already removed).
-    AvailableAnalysis.erase(PI);
+    AvailableAnalysis.erase(P->getPassID());
 
     // Remove all interfaces this pass implements, for which it is also
     // listed as the available implementation.
@@ -1148,8 +1144,7 @@ void PMDataManager::dumpPassArguments() const {
     if (PMDataManager *PMD = (*I)->getAsPMDataManager())
       PMD->dumpPassArguments();
     else
-      if (const PassInfo *PI =
-            PassRegistry::getPassRegistry()->getPassInfo((*I)->getPassID()))
+      if (const PassInfo *PI = (*I)->getPassInfo())
         if (!PI->isAnalysisGroup())
           dbgs() << " -" << PI->getPassArgument();
   }
