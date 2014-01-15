@@ -21,7 +21,9 @@ endif
 
 include $(LEVEL)/Makefile.common
 
-CFLAGS += -std=c99 -Wall -Wstrict-prototypes
+# Should have conditioned on LLVM_COMPILER_IS_GCC_COMPATIBLE,
+# but it only exists in cmake scripts.
+CFLAGS += -std=gnu99 -Wall -Wstrict-prototypes
 
 # ...but if it is built - use it
 ifeq ($(ENABLE_SHARED),1)
