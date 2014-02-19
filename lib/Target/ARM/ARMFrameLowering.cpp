@@ -14,6 +14,7 @@
 #include "ARMFrameLowering.h"
 #include "ARMBaseInstrInfo.h"
 #include "ARMBaseRegisterInfo.h"
+#include "ARMConstantPoolValue.h"
 #include "ARMInstrInfo.h"
 #include "ARMMachineFunctionInfo.h"
 #include "ARMTargetMachine.h"
@@ -1481,10 +1482,20 @@ static uint32_t AlignToARMConstant(uint32_t Value) {
 // stack limit.
 static const uint64_t kSplitStackAvailable = 256;
 
+void
+ARMFrameLowering::adjustForSegmentedStacks(MachineFunction &MF) const {
+  const ARMSubtarget *ST = &MF.getTarget().getSubtarget<ARMSubtarget>();
+  if(ST->isThumb()) {
+    adjustForSegmentedStacksThumb(MF);
+  } else {
+    adjustForSegmentedStacksARM(MF);
+  }
+}
+
 // Adjust function prologue to enable split stack.
 // Only support android and linux.
 void
-ARMFrameLowering::adjustForSegmentedStacks(MachineFunction &MF) const {
+ARMFrameLowering::adjustForSegmentedStacksARM(MachineFunction &MF) const {
   const ARMSubtarget *ST = &MF.getTarget().getSubtarget<ARMSubtarget>();
 
   // Doesn't support vararg function.
@@ -1690,6 +1701,171 @@ ARMFrameLowering::adjustForSegmentedStacks(MachineFunction &MF) const {
 
   mcrMBB->addSuccessor(getMBB);
   mcrMBB->addSuccessor(magicMBB);
+
+  prevStackMBB->addSuccessor(mcrMBB);
+
+#ifdef XDEBUG
+  MF.verify();
+#endif
+}
+
+void
+ARMFrameLowering::adjustForSegmentedStacksThumb(MachineFunction &MF) const {
+//  const ARMSubtarget *ST = &MF.getTarget().getSubtarget<ARMSubtarget>();
+
+  // Doesn't support vararg function.
+  if (MF.getFunction()->isVarArg())
+    report_fatal_error("Segmented stacks do not support vararg functions.");
+
+  MachineBasicBlock &prologueMBB = MF.front();
+  MachineFrameInfo* MFI = MF.getFrameInfo();
+  const ARMBaseInstrInfo &TII = *TM.getInstrInfo();
+  ARMFunctionInfo* ARMFI = MF.getInfo<ARMFunctionInfo>();
+  DebugLoc DL;
+
+  // Use R4 and R5 as scratch register.
+  // We should save R4 and R5 before use it and restore before
+  // leave the function.
+  unsigned ScratchReg0 = ARM::R4;
+  unsigned ScratchReg1 = ARM::R5;
+  uint64_t AlignedStackSize;
+
+  MachineBasicBlock* prevStackMBB = MF.CreateMachineBasicBlock();
+  MachineBasicBlock* postStackMBB = MF.CreateMachineBasicBlock();
+  MachineBasicBlock* allocMBB = MF.CreateMachineBasicBlock();
+  MachineBasicBlock* getMBB = MF.CreateMachineBasicBlock();
+  MachineBasicBlock* mcrMBB = MF.CreateMachineBasicBlock();
+
+  for (MachineBasicBlock::livein_iterator i = prologueMBB.livein_begin(),
+         e = prologueMBB.livein_end(); i != e; ++i) {
+    allocMBB->addLiveIn(*i);
+    getMBB->addLiveIn(*i);
+    mcrMBB->addLiveIn(*i);
+    prevStackMBB->addLiveIn(*i);
+    postStackMBB->addLiveIn(*i);
+  }
+
+  MF.push_front(postStackMBB);
+  MF.push_front(allocMBB);
+  MF.push_front(getMBB);
+  MF.push_front(mcrMBB);
+  MF.push_front(prevStackMBB);
+
+  // The required stack size that is aligend to ARM constant critarion.
+  uint64_t StackSize = MFI->getStackSize();
+
+  AlignedStackSize = AlignToARMConstant(StackSize);
+
+  // When the frame size is less than 256 we just compare the stack
+  // boundary directly to the value of the stack pointer, per gcc.
+  bool CompareStackPointer = AlignedStackSize < kSplitStackAvailable;
+
+  // We will use two of callee save registers as scratch register so we
+  // need to save those registers into stack frame before use it.
+  // We will use SR0 to hold stack limit and SR1 to stack size requested.
+  // and arguments for __morestack().
+  // SR0: Scratch Register #0
+  // SR1: Scratch Register #1
+  // push {SR0, SR1}
+  AddDefaultPred(BuildMI(prevStackMBB, DL, TII.get(ARM::tPUSH)))
+    .addReg(ScratchReg0)
+    .addReg(ScratchReg1);
+
+  // mov SR1, sp
+  AddDefaultPred(BuildMI(mcrMBB, DL, TII.get(ARM::tMOVr), ScratchReg1)
+                 .addReg(ARM::SP));
+
+  if (!CompareStackPointer) {
+    // sub SR1, #StackSize
+    AddDefaultPred(AddDefaultCC(BuildMI(mcrMBB, DL, TII.get(ARM::tSUBi8), ScratchReg1))
+                   .addReg(ScratchReg1).addImm(AlignedStackSize));
+  }
+
+  unsigned PCLabelId = ARMFI->createPICLabelUId();
+  ARMConstantPoolValue *NewCPV = ARMConstantPoolSymbol::
+    Create(MF.getFunction()->getContext(), "STACK_LIMIT", PCLabelId, 0);
+  MachineConstantPool *MCP = MF.getConstantPool();
+  unsigned CPI = MCP->getConstantPoolIndex(NewCPV, MF.getAlignment());
+
+  //ldr SR0, [pc, offset(STACK_LIMIT)]
+  AddDefaultPred(BuildMI(getMBB, DL, TII.get(ARM::tLDRpci), ScratchReg0)
+                 .addConstantPoolIndex(CPI));
+
+  //ldr SR0, [SR0]
+  AddDefaultPred(BuildMI(getMBB, DL, TII.get(ARM::tLDRi), ScratchReg0)
+                .addReg(ScratchReg0)
+                .addImm(0));
+
+  // Compare stack limit with stack size requested.
+  // cmp SR0, SR1
+  AddDefaultPred(BuildMI(getMBB, DL, TII.get(ARM::tCMPr))
+                 .addReg(ScratchReg0)
+                 .addReg(ScratchReg1));
+
+  // This jump is taken if StackLimit < SP - stack required.
+  BuildMI(getMBB, DL, TII.get(ARM::tBcc))
+    .addMBB(postStackMBB)
+    .addImm(ARMCC::LO)
+    .addReg(ARM::CPSR);
+
+
+  // Calling __morestack(StackSize, Size of stack arguments).
+  // __morestack knows that the stack size requested is in SR0(r4)
+  // and amount size of stack arguments is in SR1(r5).
+
+  // Pass first argument for the __morestack by Scratch Register #0.
+  //   The amount size of stack required
+  AddDefaultPred(AddDefaultCC(BuildMI(allocMBB, DL, TII.get(ARM::tMOVi8), ScratchReg0))
+                 .addImm(AlignedStackSize));
+  // Pass second argument for the __morestack by Scratch Register #1.
+  //   The amount size of stack consumed to save function arguments.
+  AddDefaultPred(AddDefaultCC(BuildMI(allocMBB, DL, TII.get(ARM::tMOVi8), ScratchReg1))
+                 .addImm(AlignToARMConstant(ARMFI->getArgumentStackSize())));
+
+  // push {lr} - Save return address of this function.
+  AddDefaultPred(BuildMI(allocMBB, DL, TII.get(ARM::tPUSH)))
+    .addReg(ARM::LR);
+
+  // Call __morestack().
+  AddDefaultPred(BuildMI(allocMBB, DL, TII.get(ARM::tBL)))
+    .addExternalSymbol("__morestack");
+
+  // Restore return address of this original function.
+  // pop {SR0}
+  AddDefaultPred(BuildMI(allocMBB, DL, TII.get(ARM::tPOP)))
+    .addReg(ScratchReg0);
+
+  // mov lr, SR0
+  AddDefaultPred(BuildMI(allocMBB, DL, TII.get(ARM::tMOVr), ARM::LR)
+                 .addReg(ScratchReg0));
+
+  // Restore SR0 and SR1 in case of __morestack() was called.
+  // __morestack() will skip postStackMBB block so we need to restore
+  // scratch registers from here.
+  // pop {SR0, SR1}
+  AddDefaultPred(BuildMI(allocMBB, DL, TII.get(ARM::tPOP)))
+    .addReg(ScratchReg0)
+    .addReg(ScratchReg1);
+
+  // Return from this function.
+  AddDefaultPred(BuildMI(allocMBB, DL, TII.get(ARM::tMOVr), ARM::PC)
+                 .addReg(ARM::LR));
+
+  // Restore SR0 and SR1 in case of __morestack() was not called.
+  // pop {SR0, SR1}
+  AddDefaultPred(BuildMI(postStackMBB, DL, TII.get(ARM::tPOP)))
+    .addReg(ScratchReg0)
+    .addReg(ScratchReg1);
+
+  // Organizing MBB lists
+  postStackMBB->addSuccessor(&prologueMBB);
+
+  allocMBB->addSuccessor(postStackMBB);
+
+  getMBB->addSuccessor(postStackMBB);
+  getMBB->addSuccessor(allocMBB);
+
+  mcrMBB->addSuccessor(getMBB);
 
   prevStackMBB->addSuccessor(mcrMBB);
 

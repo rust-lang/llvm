@@ -62,6 +62,8 @@ public:
                                             RegScavenger *RS) const;
 
   void adjustForSegmentedStacks(MachineFunction &MF) const;
+  void adjustForSegmentedStacksThumb(MachineFunction &MF) const;
+  void adjustForSegmentedStacksARM(MachineFunction &MF) const;
 
  private:
   void emitPushInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
