@@ -1,5 +1,5 @@
-; RUN: llc < %s -mcpu=generic -mtriple=thumb-linux-android -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=Thumb-Linux-Android
-; RUN: llc < %s -mcpu=generic -mtriple=thumb-linux-android -segmented-stacks -filetype=obj
+; RUN: llc < %s -mcpu=generic -march=thumb -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=Thumb-Generic
+; RUN: llc < %s -mcpu=generic -march=thumb -segmented-stacks -filetype=obj
 
 ; Just to prevent the alloca from being optimized away
 declare void @dummy_use(i32*, i32)
@@ -18,24 +18,24 @@ false:
         %retvalue = call i32 @test_basic(i32 %newlen)
         ret i32 %retvalue
 
-; Thumb-Linux-Android:      test_basic:
+; Thumb-Generic:      test_basic:
 
-; Thumb-Linux-Android:      push {r4, r5}
-; Thumb-Linux-Android-NEXT: mov	r5, sp
-; Thumb-Linux-Android-NEXT: ldr r4, .LCPI0_0
-; Thumb-Linux-Android-NEXT: ldr r4, [r4]
-; Thumb-Linux-Android-NEXT: cmp	r4, r5
-; Thumb-Linux-Android-NEXT: blo	.LBB0_2
+; Thumb-Generic:      push {r4, r5}
+; Thumb-Generic-NEXT: mov	r5, sp
+; Thumb-Generic-NEXT: ldr r4, .LCPI0_0
+; Thumb-Generic-NEXT: ldr r4, [r4]
+; Thumb-Generic-NEXT: cmp	r4, r5
+; Thumb-Generic-NEXT: blo	.LBB0_2
 
-; Thumb-Linux-Android:      mov r4, #16
-; Thumb-Linux-Android-NEXT: mov r5, #0
-; Thumb-Linux-Android-NEXT: push {lr}
-; Thumb-Linux-Android-NEXT: bl	__morestack
-; Thumb-Linux-Android-NEXT: pop {r4}
-; Thumb-Linux-Android-NEXT: mov lr, r4
-; Thumb-Linux-Android-NEXT: pop	{r4, r5}
-; Thumb-Linux-Android-NEXT: mov	pc, lr
+; Thumb-Generic:      mov r4, #20
+; Thumb-Generic-NEXT: mov r5, #0
+; Thumb-Generic-NEXT: push {lr}
+; Thumb-Generic-NEXT: bl	__morestack
+; Thumb-Generic-NEXT: pop {r4}
+; Thumb-Generic-NEXT: mov lr, r4
+; Thumb-Generic-NEXT: pop	{r4, r5}
+; Thumb-Generic-NEXT: mov	pc, lr
 
-; Thumb-Linux-Android:      pop	{r4, r5}
+; Thumb-Generic:      pop	{r4, r5}
 
 }
