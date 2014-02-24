@@ -1,7 +1,7 @@
-; RUN: llc < %s -mcpu=generic -mtriple=thumb-linux-android -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=Thumb-Linux-Android
+; RUN: llc < %s -mtriple=thumb-unknown-unknown -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=Thumb-Generic
 
 ; We used to crash with filetype=obj
-; RUN: llc < %s -mcpu=generic -mtriple=thumb-linux-android -segmented-stacks -filetype=obj
+; RUN: llc < %s -mtriple=thumb-unknown-unknown -segmented-stacks -filetype=obj
 
 
 ; Just to prevent the alloca from being optimized away
@@ -12,25 +12,25 @@ define void @test_basic() {
         call void @dummy_use (i32* %mem, i32 10)
 	ret void
 
-; Thumb-Linux-Android:      test_basic:
+; Thumb-Generic:      test_basic:
 
-; Thumb-Linux-Android:      push    {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     r5, sp
-; Thumb-Linux-Android-NEXT: ldr     r4, .LCPI0_0
-; Thumb-Linux-Android-NEXT: ldr     r4, [r4]
-; Thumb-Linux-Android-NEXT: cmp     r4, r5
-; Thumb-Linux-Android-NEXT: blo     .LBB0_2
+; Thumb-Generic:      push    {r4, r5}
+; Thumb-Generic-NEXT: mov     r5, sp
+; Thumb-Generic-NEXT: ldr     r4, .LCPI0_0
+; Thumb-Generic-NEXT: ldr     r4, [r4]
+; Thumb-Generic-NEXT: cmp     r4, r5
+; Thumb-Generic-NEXT: blo     .LBB0_2
 
-; Thumb-Linux-Android:      mov     r4, #48
-; Thumb-Linux-Android-NEXT: mov     r5, #0
-; Thumb-Linux-Android-NEXT: push    {lr}
-; Thumb-Linux-Android-NEXT: bl      __morestack
-; Thumb-Linux-Android-NEXT: pop     {r4}
-; Thumb-Linux-Android-NEXT: mov     lr, r4
-; Thumb-Linux-Android-NEXT: pop     {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     pc, lr
+; Thumb-Generic:      mov     r4, #44
+; Thumb-Generic-NEXT: mov     r5, #0
+; Thumb-Generic-NEXT: push    {lr}
+; Thumb-Generic-NEXT: bl      __morestack
+; Thumb-Generic-NEXT: pop     {r4}
+; Thumb-Generic-NEXT: mov     lr, r4
+; Thumb-Generic-NEXT: pop     {r4, r5}
+; Thumb-Generic-NEXT: mov     pc, lr
 
-; Thumb-Linux-Android:      pop     {r4, r5}
+; Thumb-Generic:      pop     {r4, r5}
 
 }
 
@@ -39,25 +39,25 @@ define i32 @test_nested(i32 * nest %closure, i32 %other) {
        %result = add i32 %other, %addend
        ret i32 %result
 
-; Thumb-Linux-Android:      test_nested:
+; Thumb-Generic:      test_nested:
 
-; Thumb-Linux-Android:      push    {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     r5, sp
-; Thumb-Linux-Android-NEXT: ldr     r4, .LCPI1_0
-; Thumb-Linux-Android-NEXT: ldr     r4, [r4]
-; Thumb-Linux-Android-NEXT: cmp     r4, r5
-; Thumb-Linux-Android-NEXT: blo     .LBB1_2
+; Thumb-Generic:      push    {r4, r5}
+; Thumb-Generic-NEXT: mov     r5, sp
+; Thumb-Generic-NEXT: ldr     r4, .LCPI1_0
+; Thumb-Generic-NEXT: ldr     r4, [r4]
+; Thumb-Generic-NEXT: cmp     r4, r5
+; Thumb-Generic-NEXT: blo     .LBB1_2
 
-; Thumb-Linux-Android:      mov     r4, #0
-; Thumb-Linux-Android-NEXT: mov     r5, #0
-; Thumb-Linux-Android-NEXT: push    {lr}
-; Thumb-Linux-Android-NEXT: bl      __morestack
-; Thumb-Linux-Android-NEXT: pop     {r4}
-; Thumb-Linux-Android-NEXT: mov     lr, r4
-; Thumb-Linux-Android-NEXT: pop     {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     pc, lr
+; Thumb-Generic:      mov     r4, #0
+; Thumb-Generic-NEXT: mov     r5, #0
+; Thumb-Generic-NEXT: push    {lr}
+; Thumb-Generic-NEXT: bl      __morestack
+; Thumb-Generic-NEXT: pop     {r4}
+; Thumb-Generic-NEXT: mov     lr, r4
+; Thumb-Generic-NEXT: pop     {r4, r5}
+; Thumb-Generic-NEXT: mov     pc, lr
 
-; Thumb-Linux-Android:      pop     {r4, r5}
+; Thumb-Generic:      pop     {r4, r5}
 
 }
 
@@ -66,26 +66,26 @@ define void @test_large() {
         call void @dummy_use (i32* %mem, i32 0)
         ret void
 
-; Thumb-Linux-Android:      test_large:
+; Thumb-Generic:      test_large:
 
-; Thumb-Linux-Android:      push    {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     r5, sp
-; Thumb-Linux-Android-NEXT: sub     r5, #40192
-; Thumb-Linux-Android-NEXT: ldr     r4, .LCPI2_2
-; Thumb-Linux-Android-NEXT: ldr     r4, [r4]
-; Thumb-Linux-Android-NEXT: cmp     r4, r5
-; Thumb-Linux-Android-NEXT: blo     .LBB2_2
+; Thumb-Generic:      push    {r4, r5}
+; Thumb-Generic-NEXT: mov     r5, sp
+; Thumb-Generic-NEXT: sub     r5, #40192
+; Thumb-Generic-NEXT: ldr     r4, .LCPI2_2
+; Thumb-Generic-NEXT: ldr     r4, [r4]
+; Thumb-Generic-NEXT: cmp     r4, r5
+; Thumb-Generic-NEXT: blo     .LBB2_2
 
-; Thumb-Linux-Android:      mov     r4, #40192
-; Thumb-Linux-Android-NEXT: mov     r5, #0
-; Thumb-Linux-Android-NEXT: push    {lr}
-; Thumb-Linux-Android-NEXT: bl      __morestack
-; Thumb-Linux-Android-NEXT: pop     {r4}
-; Thumb-Linux-Android-NEXT: mov     lr, r4
-; Thumb-Linux-Android-NEXT: pop     {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     pc, lr
+; Thumb-Generic:      mov     r4, #40192
+; Thumb-Generic-NEXT: mov     r5, #0
+; Thumb-Generic-NEXT: push    {lr}
+; Thumb-Generic-NEXT: bl      __morestack
+; Thumb-Generic-NEXT: pop     {r4}
+; Thumb-Generic-NEXT: mov     lr, r4
+; Thumb-Generic-NEXT: pop     {r4, r5}
+; Thumb-Generic-NEXT: mov     pc, lr
 
-; Thumb-Linux-Android:      pop     {r4, r5}
+; Thumb-Generic:      pop     {r4, r5}
 
 }
 
@@ -94,25 +94,25 @@ define fastcc void @test_fastcc() {
         call void @dummy_use (i32* %mem, i32 10)
         ret void
 
-; Thumb-Linux-Android:      test_fastcc:
+; Thumb-Generic:      test_fastcc:
 
-; Thumb-Linux-Android:      push    {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     r5, sp
-; Thumb-Linux-Android-NEXT: ldr     r4, .LCPI3_0
-; Thumb-Linux-Android-NEXT: ldr     r4, [r4]
-; Thumb-Linux-Android-NEXT: cmp     r4, r5
-; Thumb-Linux-Android-NEXT: blo     .LBB3_2
+; Thumb-Generic:      push    {r4, r5}
+; Thumb-Generic-NEXT: mov     r5, sp
+; Thumb-Generic-NEXT: ldr     r4, .LCPI3_0
+; Thumb-Generic-NEXT: ldr     r4, [r4]
+; Thumb-Generic-NEXT: cmp     r4, r5
+; Thumb-Generic-NEXT: blo     .LBB3_2
 
-; Thumb-Linux-Android:      mov     r4, #48
-; Thumb-Linux-Android-NEXT: mov     r5, #0
-; Thumb-Linux-Android-NEXT: push    {lr}
-; Thumb-Linux-Android-NEXT: bl      __morestack
-; Thumb-Linux-Android-NEXT: pop     {r4}
-; Thumb-Linux-Android-NEXT: mov     lr, r4
-; Thumb-Linux-Android-NEXT: pop     {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     pc, lr
+; Thumb-Generic:      mov     r4, #44
+; Thumb-Generic-NEXT: mov     r5, #0
+; Thumb-Generic-NEXT: push    {lr}
+; Thumb-Generic-NEXT: bl      __morestack
+; Thumb-Generic-NEXT: pop     {r4}
+; Thumb-Generic-NEXT: mov     lr, r4
+; Thumb-Generic-NEXT: pop     {r4, r5}
+; Thumb-Generic-NEXT: mov     pc, lr
 
-; Thumb-Linux-Android:      pop     {r4, r5}
+; Thumb-Generic:      pop     {r4, r5}
 
 }
 
@@ -121,25 +121,25 @@ define fastcc void @test_fastcc_large() {
         call void @dummy_use (i32* %mem, i32 0)
         ret void
 
-; Thumb-Linux-Android:      test_fastcc_large:
+; Thumb-Generic:      test_fastcc_large:
 
-; Thumb-Linux-Android:      push    {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     r5, sp
-; Thumb-Linux-Android-NEXT: sub     r5, #40192
-; Thumb-Linux-Android-NEXT: ldr     r4, .LCPI4_2
-; Thumb-Linux-Android-NEXT: ldr     r4, [r4]
-; Thumb-Linux-Android-NEXT: cmp     r4, r5
-; Thumb-Linux-Android-NEXT: blo     .LBB4_2
+; Thumb-Generic:      push    {r4, r5}
+; Thumb-Generic-NEXT: mov     r5, sp
+; Thumb-Generic-NEXT: sub     r5, #40192
+; Thumb-Generic-NEXT: ldr     r4, .LCPI4_2
+; Thumb-Generic-NEXT: ldr     r4, [r4]
+; Thumb-Generic-NEXT: cmp     r4, r5
+; Thumb-Generic-NEXT: blo     .LBB4_2
 
-; Thumb-Linux-Android:      mov     r4, #40192
-; Thumb-Linux-Android-NEXT: mov     r5, #0
-; Thumb-Linux-Android-NEXT: push    {lr}
-; Thumb-Linux-Android-NEXT: bl      __morestack
-; Thumb-Linux-Android-NEXT: pop     {r4}
-; Thumb-Linux-Android-NEXT: mov     lr, r4
-; Thumb-Linux-Android-NEXT: pop     {r4, r5}
-; Thumb-Linux-Android-NEXT: mov     pc, lr
+; Thumb-Generic:      mov     r4, #40192
+; Thumb-Generic-NEXT: mov     r5, #0
+; Thumb-Generic-NEXT: push    {lr}
+; Thumb-Generic-NEXT: bl      __morestack
+; Thumb-Generic-NEXT: pop     {r4}
+; Thumb-Generic-NEXT: mov     lr, r4
+; Thumb-Generic-NEXT: pop     {r4, r5}
+; Thumb-Generic-NEXT: mov     pc, lr
 
-; Thumb-Linux-Android:      pop     {r4, r5}
+; Thumb-Generic:      pop     {r4, r5}
 
 }
