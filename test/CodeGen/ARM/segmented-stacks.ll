@@ -1,7 +1,7 @@
-; RUN: llc < %s -mcpu=generic -march=arm -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=ARM-Generic
+; RUN: llc < %s -mtriple=arm-linux-android -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=ARM-Linux-Android
 
 ; We used to crash with filetype=obj
-; RUN: llc < %s -mcpu=generic -march=arm -segmented-stacks -filetype=obj
+; RUN: llc < %s -mtriple=arm-linux-android -segmented-stacks -filetype=obj
 
 
 ; Just to prevent the alloca from being optimized away
@@ -12,28 +12,28 @@ define void @test_basic() {
         call void @dummy_use (i32* %mem, i32 10)
 	ret void
 
-; ARM-Generic:      test_basic:
+; ARM-Linux-Android:      test_basic:
 
-; ARM-Generic:      push    {r4, r5}
-; ARM-Generic-NEXT: mrc     p15, #0, r4, c13, c0, #3
-; ARM-Generic-NEXT: mov     r5, sp
-; ARM-Generic-NEXT: cmp     r4, #0
-; ARM-Generic-NEXT: mvneq   r4, #61440
-; ARM-Generic-NEXT: ldreq   r4, [r4, #-15]
-; ARM-Generic-NEXT: add     r4, r4, #4
-; ARM-Generic-NEXT: ldr     r4, [r4]
-; ARM-Generic-NEXT: cmp     r4, r5
-; ARM-Generic-NEXT: blo     .LBB0_2
+; ARM-Linux-Android:      push    {r4, r5}
+; ARM-Linux-Android-NEXT: mrc     p15, #0, r4, c13, c0, #3
+; ARM-Linux-Android-NEXT: mov     r5, sp
+; ARM-Linux-Android-NEXT: cmp     r4, #0
+; ARM-Linux-Android-NEXT: mvneq   r4, #61440
+; ARM-Linux-Android-NEXT: ldreq   r4, [r4, #-15]
+; ARM-Linux-Android-NEXT: add     r4, r4, #252
+; ARM-Linux-Android-NEXT: ldr     r4, [r4]
+; ARM-Linux-Android-NEXT: cmp     r4, r5
+; ARM-Linux-Android-NEXT: blo     .LBB0_2
 
-; ARM-Generic:      mov     r4, #44
-; ARM-Generic-NEXT: mov     r5, #0
-; ARM-Generic-NEXT: stmdb   sp!, {lr}
-; ARM-Generic-NEXT: bl      __morestack
-; ARM-Generic-NEXT: ldm     sp!, {lr}
-; ARM-Generic-NEXT: pop     {r4, r5}
-; ARM-Generic-NEXT: mov     pc, lr
+; ARM-Linux-Android:      mov     r4, #48
+; ARM-Linux-Android-NEXT: mov     r5, #0
+; ARM-Linux-Android-NEXT: stmdb   sp!, {lr}
+; ARM-Linux-Android-NEXT: bl      __morestack
+; ARM-Linux-Android-NEXT: ldm     sp!, {lr}
+; ARM-Linux-Android-NEXT: pop     {r4, r5}
+; ARM-Linux-Android-NEXT: mov     pc, lr
 
-; ARM-Generic:      pop     {r4, r5}
+; ARM-Linux-Android:      pop     {r4, r5}
 
 }
 
@@ -42,28 +42,28 @@ define i32 @test_nested(i32 * nest %closure, i32 %other) {
        %result = add i32 %other, %addend
        ret i32 %result
 
-; ARM-Generic:      test_nested:
+; ARM-Linux-Android:      test_nested:
 
-; ARM-Generic:      push    {r4, r5}
-; ARM-Generic-NEXT: mrc     p15, #0, r4, c13, c0, #3
-; ARM-Generic-NEXT: mov     r5, sp
-; ARM-Generic-NEXT: cmp     r4, #0
-; ARM-Generic-NEXT: mvneq   r4, #61440
-; ARM-Generic-NEXT: ldreq   r4, [r4, #-15]
-; ARM-Generic-NEXT: add     r4, r4, #4
-; ARM-Generic-NEXT: ldr     r4, [r4]
-; ARM-Generic-NEXT: cmp     r4, r5
-; ARM-Generic-NEXT: blo     .LBB1_2
+; ARM-Linux-Android:      push    {r4, r5}
+; ARM-Linux-Android-NEXT: mrc     p15, #0, r4, c13, c0, #3
+; ARM-Linux-Android-NEXT: mov     r5, sp
+; ARM-Linux-Android-NEXT: cmp     r4, #0
+; ARM-Linux-Android-NEXT: mvneq   r4, #61440
+; ARM-Linux-Android-NEXT: ldreq   r4, [r4, #-15]
+; ARM-Linux-Android-NEXT: add     r4, r4, #252
+; ARM-Linux-Android-NEXT: ldr     r4, [r4]
+; ARM-Linux-Android-NEXT: cmp     r4, r5
+; ARM-Linux-Android-NEXT: blo     .LBB1_2
 
-; ARM-Generic:      mov     r4, #0
-; ARM-Generic-NEXT: mov     r5, #0
-; ARM-Generic-NEXT: stmdb   sp!, {lr}
-; ARM-Generic-NEXT: bl      __morestack
-; ARM-Generic-NEXT: ldm     sp!, {lr}
-; ARM-Generic-NEXT: pop     {r4, r5}
-; ARM-Generic-NEXT: mov     pc, lr
+; ARM-Linux-Android:      mov     r4, #0
+; ARM-Linux-Android-NEXT: mov     r5, #0
+; ARM-Linux-Android-NEXT: stmdb   sp!, {lr}
+; ARM-Linux-Android-NEXT: bl      __morestack
+; ARM-Linux-Android-NEXT: ldm     sp!, {lr}
+; ARM-Linux-Android-NEXT: pop     {r4, r5}
+; ARM-Linux-Android-NEXT: mov     pc, lr
 
-; ARM-Generic:      pop     {r4, r5}
+; ARM-Linux-Android:      pop     {r4, r5}
 
 }
 
@@ -72,28 +72,28 @@ define void @test_large() {
         call void @dummy_use (i32* %mem, i32 0)
         ret void
 
-; ARM-Generic:      test_large:
+; ARM-Linux-Android:      test_large:
 
-; ARM-Generic:      push    {r4, r5}
-; ARM-Generic-NEXT: mrc     p15, #0, r4, c13, c0, #3
-; ARM-Generic-NEXT: sub     r5, sp, #40192
-; ARM-Generic-NEXT: cmp     r4, #0
-; ARM-Generic-NEXT: mvneq   r4, #61440
-; ARM-Generic-NEXT: ldreq   r4, [r4, #-15]
-; ARM-Generic-NEXT: add     r4, r4, #4
-; ARM-Generic-NEXT: ldr     r4, [r4]
-; ARM-Generic-NEXT: cmp     r4, r5
-; ARM-Generic-NEXT: blo     .LBB2_2
+; ARM-Linux-Android:      push    {r4, r5}
+; ARM-Linux-Android-NEXT: mrc     p15, #0, r4, c13, c0, #3
+; ARM-Linux-Android-NEXT: sub     r5, sp, #40192
+; ARM-Linux-Android-NEXT: cmp     r4, #0
+; ARM-Linux-Android-NEXT: mvneq   r4, #61440
+; ARM-Linux-Android-NEXT: ldreq   r4, [r4, #-15]
+; ARM-Linux-Android-NEXT: add     r4, r4, #252
+; ARM-Linux-Android-NEXT: ldr     r4, [r4]
+; ARM-Linux-Android-NEXT: cmp     r4, r5
+; ARM-Linux-Android-NEXT: blo     .LBB2_2
 
-; ARM-Generic:      mov     r4, #40192
-; ARM-Generic-NEXT: mov     r5, #0
-; ARM-Generic-NEXT: stmdb   sp!, {lr}
-; ARM-Generic-NEXT: bl      __morestack
-; ARM-Generic-NEXT: ldm     sp!, {lr}
-; ARM-Generic-NEXT: pop     {r4, r5}
-; ARM-Generic-NEXT: mov     pc, lr
+; ARM-Linux-Android:      mov     r4, #40192
+; ARM-Linux-Android-NEXT: mov     r5, #0
+; ARM-Linux-Android-NEXT: stmdb   sp!, {lr}
+; ARM-Linux-Android-NEXT: bl      __morestack
+; ARM-Linux-Android-NEXT: ldm     sp!, {lr}
+; ARM-Linux-Android-NEXT: pop     {r4, r5}
+; ARM-Linux-Android-NEXT: mov     pc, lr
 
-; ARM-Generic:      pop     {r4, r5}
+; ARM-Linux-Android:      pop     {r4, r5}
 
 }
 
@@ -102,28 +102,28 @@ define fastcc void @test_fastcc() {
         call void @dummy_use (i32* %mem, i32 10)
         ret void
 
-; ARM-Generic:      test_fastcc:
+; ARM-Linux-Android:      test_fastcc:
 
-; ARM-Generic:      push    {r4, r5}
-; ARM-Generic-NEXT: mrc     p15, #0, r4, c13, c0, #3
-; ARM-Generic-NEXT: mov     r5, sp
-; ARM-Generic-NEXT: cmp     r4, #0
-; ARM-Generic-NEXT: mvneq   r4, #61440
-; ARM-Generic-NEXT: ldreq   r4, [r4, #-15]
-; ARM-Generic-NEXT: add     r4, r4, #4
-; ARM-Generic-NEXT: ldr     r4, [r4]
-; ARM-Generic-NEXT: cmp     r4, r5
-; ARM-Generic-NEXT: blo     .LBB3_2
+; ARM-Linux-Android:      push    {r4, r5}
+; ARM-Linux-Android-NEXT: mrc     p15, #0, r4, c13, c0, #3
+; ARM-Linux-Android-NEXT: mov     r5, sp
+; ARM-Linux-Android-NEXT: cmp     r4, #0
+; ARM-Linux-Android-NEXT: mvneq   r4, #61440
+; ARM-Linux-Android-NEXT: ldreq   r4, [r4, #-15]
+; ARM-Linux-Android-NEXT: add     r4, r4, #252
+; ARM-Linux-Android-NEXT: ldr     r4, [r4]
+; ARM-Linux-Android-NEXT: cmp     r4, r5
+; ARM-Linux-Android-NEXT: blo     .LBB3_2
 
-; ARM-Generic:      mov     r4, #44
-; ARM-Generic-NEXT: mov     r5, #0
-; ARM-Generic-NEXT: stmdb   sp!, {lr}
-; ARM-Generic-NEXT: bl      __morestack
-; ARM-Generic-NEXT: ldm     sp!, {lr}
-; ARM-Generic-NEXT: pop     {r4, r5}
-; ARM-Generic-NEXT: mov     pc, lr
+; ARM-Linux-Android:      mov     r4, #48
+; ARM-Linux-Android-NEXT: mov     r5, #0
+; ARM-Linux-Android-NEXT: stmdb   sp!, {lr}
+; ARM-Linux-Android-NEXT: bl      __morestack
+; ARM-Linux-Android-NEXT: ldm     sp!, {lr}
+; ARM-Linux-Android-NEXT: pop     {r4, r5}
+; ARM-Linux-Android-NEXT: mov     pc, lr
 
-; ARM-Generic:      pop     {r4, r5}
+; ARM-Linux-Android:      pop     {r4, r5}
 
 }
 
@@ -132,27 +132,27 @@ define fastcc void @test_fastcc_large() {
         call void @dummy_use (i32* %mem, i32 0)
         ret void
 
-; ARM-Generic:      test_fastcc_large:
+; ARM-Linux-Android:      test_fastcc_large:
 
-; ARM-Generic:      push    {r4, r5}
-; ARM-Generic-NEXT: mrc     p15, #0, r4, c13, c0, #3
-; ARM-Generic-NEXT: sub     r5, sp, #40192
-; ARM-Generic-NEXT: cmp     r4, #0
-; ARM-Generic-NEXT: mvneq   r4, #61440
-; ARM-Generic-NEXT: ldreq   r4, [r4, #-15]
-; ARM-Generic-NEXT: add     r4, r4, #4
-; ARM-Generic-NEXT: ldr     r4, [r4]
-; ARM-Generic-NEXT: cmp     r4, r5
-; ARM-Generic-NEXT: blo     .LBB4_2
+; ARM-Linux-Android:      push    {r4, r5}
+; ARM-Linux-Android-NEXT: mrc     p15, #0, r4, c13, c0, #3
+; ARM-Linux-Android-NEXT: sub     r5, sp, #40192
+; ARM-Linux-Android-NEXT: cmp     r4, #0
+; ARM-Linux-Android-NEXT: mvneq   r4, #61440
+; ARM-Linux-Android-NEXT: ldreq   r4, [r4, #-15]
+; ARM-Linux-Android-NEXT: add     r4, r4, #252
+; ARM-Linux-Android-NEXT: ldr     r4, [r4]
+; ARM-Linux-Android-NEXT: cmp     r4, r5
+; ARM-Linux-Android-NEXT: blo     .LBB4_2
 
-; ARM-Generic:      mov     r4, #40192
-; ARM-Generic-NEXT: mov     r5, #0
-; ARM-Generic-NEXT: stmdb   sp!, {lr}
-; ARM-Generic-NEXT: bl      __morestack
-; ARM-Generic-NEXT: ldm     sp!, {lr}
-; ARM-Generic-NEXT: pop     {r4, r5}
-; ARM-Generic-NEXT: mov     pc, lr
+; ARM-Linux-Android:      mov     r4, #40192
+; ARM-Linux-Android-NEXT: mov     r5, #0
+; ARM-Linux-Android-NEXT: stmdb   sp!, {lr}
+; ARM-Linux-Android-NEXT: bl      __morestack
+; ARM-Linux-Android-NEXT: ldm     sp!, {lr}
+; ARM-Linux-Android-NEXT: pop     {r4, r5}
+; ARM-Linux-Android-NEXT: mov     pc, lr
 
-; ARM-Generic:      pop     {r4, r5}
+; ARM-Linux-Android:      pop     {r4, r5}
 
 }

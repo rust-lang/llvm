@@ -1,5 +1,5 @@
-; RUN: llc < %s -mcpu=generic -march=thumb -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=Thumb-Generic
-; RUN: llc < %s -mcpu=generic -march=thumb -segmented-stacks -filetype=obj
+; RUN: llc < %s -mtriple=thumb-unknown-unknown -segmented-stacks -verify-machineinstrs | FileCheck %s -check-prefix=Thumb-Generic
+; RUN: llc < %s -mtriple=thumb-unknown-unknown -segmented-stacks -filetype=obj
 
 ; Just to prevent the alloca from being optimized away
 declare void @dummy_use(i32*, i32)
