@@ -1,24 +1,26 @@
 ; RUN: opt -S -instcombine < %s | FileCheck %s
 ; <rdar://problem/8558713>
 
-; @LOCALMOD-BEGIN
 ; PNaCl does not support the with.overflow intrinsics in its stable
 ; ABI, so these optimizations are disabled.
 
-; RUN: opt -S -instcombine < %s | FileCheck %s -check-prefix=PNACL
-; PNACL-NOT: with.overflow
+; However, these are optimizations are reenabled because this LLVM
+; has other targets to support (the above comment is null & void for
+; now at least).
+; R;UN: opt -S -instcombine < %s | FileCheck %s -check-prefix=PNACL
+; P;NACL-NOT: with.overflow
 
 declare void @throwAnExceptionOrWhatever()
 
 ; CHECK-LABEL: @test1(
 define i32 @test1(i32 %a, i32 %b) nounwind ssp {
 entry:
-; C;HECK-NOT: sext
+; CHECK-NOT: sext
   %conv = sext i32 %a to i64
   %conv2 = sext i32 %b to i64
   %add = add nsw i64 %conv2, %conv
   %add.off = add i64 %add, 2147483648
-; C;HECK: llvm.sadd.with.overflow.i32
+; CHECK: llvm.sadd.with.overflow.i32
   %0 = icmp ugt i64 %add.off, 4294967295
   br i1 %0, label %if.then, label %if.end
 
@@ -27,9 +29,9 @@ if.then:
   br label %if.end
 
 if.end:
-; C;HECK-NOT: trunc
+; CHECK-NOT: trunc
   %conv9 = trunc i64 %add to i32
-; C;HECK: ret i32
+; CHECK: ret i32
   ret i32 %conv9
 }
 
@@ -93,7 +95,7 @@ entry:
   %add4 = add nsw i32 %add, 128
   %cmp = icmp ugt i32 %add4, 255
   br i1 %cmp, label %if.then, label %if.end
-; C;HECK: llvm.sadd.with.overflow.i8
+; CHECK: llvm.sadd.with.overflow.i8
 if.then:                                          ; preds = %entry
   tail call void @throwAnExceptionOrWhatever() nounwind
   unreachable
@@ -105,7 +107,7 @@ if.end:                                           ; preds = %entry
 }
 
 ; CHECK-LABEL: @test5(
-; C;HECK: llvm.uadd.with.overflow
+; CHECK: llvm.uadd.with.overflow
 ; CHECK: ret i64
 define i64 @test5(i64 %a, i64 %b) nounwind ssp {
 entry:
@@ -116,7 +118,7 @@ entry:
 }
 
 ; CHECK-LABEL: @test6(
-; C;HECK: llvm.uadd.with.overflow
+; CHECK: llvm.uadd.with.overflow
 ; CHECK: ret i64
 define i64 @test6(i64 %a, i64 %b) nounwind ssp {
 entry:
@@ -127,7 +129,7 @@ entry:
 }
 
 ; CHECK-LABEL: @test7(
-; C;HECK: llvm.uadd.with.overflow
+; CHECK: llvm.uadd.with.overflow
 ; CHECK: ret i64
 define i64 @test7(i64 %a, i64 %b) nounwind ssp {
 entry:
@@ -160,5 +162,3 @@ if.end:
   %conv9 = trunc i64 %add to i32
   ret i32 %conv9
 }
-
-; @LOCALMOD-END
