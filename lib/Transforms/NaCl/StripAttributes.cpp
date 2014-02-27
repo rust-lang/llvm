@@ -94,6 +94,7 @@ static void CheckAttributes(AttributeSet Attrs) {
         case Attribute::OptimizeForSize:
         case Attribute::ReadNone:
         case Attribute::ReadOnly:
+        case Attribute::Cold:
 
         // PNaCl does not support -fstack-protector in the translator.
         case Attribute::StackProtect:
