@@ -199,15 +199,10 @@ static void ExpandExtractValue(ExtractValueInst *EV) {
   // Search for the insertvalue instruction that inserts the struct
   // field referenced by this extractvalue instruction.
   Value *StructVal = EV->getAggregateOperand();
-  Value *ResultField;
+  Value *ResultField = NULL;
   for (;;) {
     if (InsertValueInst *IV = dyn_cast<InsertValueInst>(StructVal)) {
-      if (EV->getNumIndices() != 1 || IV->getNumIndices() != 1) {
-        errs() << "Value: " << *EV << "\n";
-        errs() << "Value: " << *IV << "\n";
-        report_fatal_error("ExpandStructRegs does not handle nested structs");
-      }
-      if (EV->getIndices()[0] == IV->getIndices()[0]) {
+      if (EV->getIndices().equals(IV->getIndices())) {
         ResultField = IV->getInsertedValueOperand();
         break;
       }
@@ -221,6 +216,8 @@ static void ExpandExtractValue(ExtractValueInst *EV) {
       report_fatal_error("Unrecognized struct value");
     }
   }
+
+  assert(ResultField != NULL);
   EV->replaceAllUsesWith(ResultField);
   EV->eraseFromParent();
 }
