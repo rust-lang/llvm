@@ -27,7 +27,7 @@ EnableSjLjEH("enable-pnacl-sjlj-eh",
                       "as part of the pnacl-abi-simplify passes"),
              cl::init(false));
 
-void llvm::PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM) {
+void llvm::PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM, const bool BuildingLibrary) {
   if (EnableSjLjEH) {
     // This comes before ExpandTls because it introduces references to
     // a TLS variable, __pnacl_eh_stack.  This comes before
@@ -42,10 +42,11 @@ void llvm::PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM) {
     PM.add(createCFGSimplificationPass());
   }
 
-  // Internalize all symbols in the module except _start, which is the only
-  // symbol a stable PNaCl pexe is allowed to export.
-  const char *SymbolsToPreserve[] = { "_start" };
-  PM.add(createInternalizePass(SymbolsToPreserve));
+  if(!BuildingLibrary) {
+    // Internalize all symbols in the module except _start, which is the only
+    // symbol a stable PNaCl pexe is allowed to export.
+    PM.add(createInternalizePass("_start"));
+  }
 
   // LowerExpect converts Intrinsic::expect into branch weights,
   // which can then be removed after BlockPlacement.
@@ -72,9 +73,11 @@ void llvm::PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM) {
   PM.add(createExpandCtorsPass());
   PM.add(createResolveAliasesPass());
   PM.add(createExpandTlsPass());
-  // GlobalCleanup needs to run after ExpandTls because
-  // __tls_template_start etc. are extern_weak before expansion
-  PM.add(createGlobalCleanupPass());
+  if(!BuildingLibrary) {
+    // GlobalCleanup needs to run after ExpandTls because
+    // __tls_template_start etc. are extern_weak before expansion
+    PM.add(createGlobalCleanupPass());
+  }
 }
 
 void llvm::PNaClABISimplifyAddPostOptPasses(PassManagerBase &PM) {
