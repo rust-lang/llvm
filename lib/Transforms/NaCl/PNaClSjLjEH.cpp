@@ -119,7 +119,7 @@ namespace {
   };
 
   class FuncRewriter {
-    Type *ExceptionFrameTy;
+    StructType *ExceptionFrameTy;
     ExceptionInfoWriter *ExcInfoWriter;
     Function *Func;
 
@@ -127,7 +127,7 @@ namespace {
     // been initialized.
     bool FrameInitialized;
     Function *SetjmpIntrinsic;  // setjmp() intrinsic function
-    Instruction *EHStackTlsVar;  // Bitcast of thread-local __pnacl_eh_stack var
+    Value *EHStackTlsVar;  // Possibly bitcasted value of thread-local __pnacl_eh_stack var
     Instruction *Frame;  // Frame allocated for this function
     Instruction *FrameJmpBuf;  // Frame's jmp_buf field
     Instruction *FrameNextPtr;  // Frame's next field
@@ -140,7 +140,7 @@ namespace {
     void initializeFrame();
 
   public:
-    FuncRewriter(Type *ExceptionFrameTy, ExceptionInfoWriter *ExcInfoWriter,
+    FuncRewriter(StructType *ExceptionFrameTy, ExceptionInfoWriter *ExcInfoWriter,
                  Function *Func):
         ExceptionFrameTy(ExceptionFrameTy),
         ExcInfoWriter(ExcInfoWriter),
@@ -173,40 +173,46 @@ void FuncRewriter::initializeFrame() {
 
   SetjmpIntrinsic = Intrinsic::getDeclaration(M, Intrinsic::nacl_setjmp);
 
-  Value *EHStackTlsVarUncast = M->getGlobalVariable("__pnacl_eh_stack");
-  if (!EHStackTlsVarUncast)
-    report_fatal_error("__pnacl_eh_stack not defined");
-  EHStackTlsVar = new BitCastInst(
-      EHStackTlsVarUncast, ExceptionFrameTy->getPointerTo()->getPointerTo(),
-      "pnacl_eh_stack");
-  Func->getEntryBlock().getInstList().push_front(EHStackTlsVar);
+  Instruction* InsertPt = Func->getEntryBlock().getFirstNonPHIOrDbgOrLifetime();
+
+  GlobalVariable *EHStackTlsVarUncast = M->getGlobalVariable("__pnacl_eh_stack");
+  PointerType* EhFrameTyPtr = ExceptionFrameTy->getPointerTo();
+  if (!EHStackTlsVarUncast) {
+    EHStackTlsVarUncast = cast<GlobalVariable>(M->getOrInsertGlobal("__pnacl_eh_stack",
+                                                                    EhFrameTyPtr));
+    EHStackTlsVarUncast->setThreadLocal(true);
+    EHStackTlsVarUncast->setLinkage(GlobalValue::LinkOnceAnyLinkage);
+    EHStackTlsVarUncast->setInitializer(ConstantPointerNull::get(EhFrameTyPtr));
+    EHStackTlsVar = EHStackTlsVarUncast;
+  } else {
+    EHStackTlsVar = new BitCastInst(EHStackTlsVarUncast,
+                                    EhFrameTyPtr->getPointerTo(),
+                                    "pnacl_eh_stack",
+                                    InsertPt);
+  }
 
   // Allocate the new exception frame.  This is reused across all
   // invoke instructions in the function.
   Type *I32 = Type::getInt32Ty(M->getContext());
   Frame = new AllocaInst(ExceptionFrameTy, ConstantInt::get(I32, 1),
-                         kPNaClJmpBufAlign, "invoke_frame");
-  Func->getEntryBlock().getInstList().push_front(Frame);
+                         kPNaClJmpBufAlign, "invoke_frame", InsertPt);
 
   // Calculate addresses of fields in the exception frame.
   Value *JmpBufIndexes[] = { ConstantInt::get(I32, 0),
                              ConstantInt::get(I32, 0),
                              ConstantInt::get(I32, 0) };
   FrameJmpBuf = GetElementPtrInst::Create(Frame, JmpBufIndexes,
-                                          "invoke_jmp_buf");
-  FrameJmpBuf->insertAfter(Frame);
+                                          "invoke_jmp_buf", InsertPt);
 
   Value *NextPtrIndexes[] = { ConstantInt::get(I32, 0),
                               ConstantInt::get(I32, 1) };
   FrameNextPtr = GetElementPtrInst::Create(Frame, NextPtrIndexes,
-                                           "invoke_next");
-  FrameNextPtr->insertAfter(Frame);
+                                           "invoke_next", InsertPt);
 
   Value *ExcInfoIndexes[] = { ConstantInt::get(I32, 0),
                               ConstantInt::get(I32, 2) };
   FrameExcInfo = GetElementPtrInst::Create(Frame, ExcInfoIndexes,
-                                           "exc_info_ptr");
-  FrameExcInfo->insertAfter(Frame);
+                                           "exc_info_ptr", InsertPt);
 }
 
 // Creates the helper function that will do the setjmp() call and
@@ -223,8 +229,10 @@ Value *FuncRewriter::createSetjmpWrappedCall(InvokeInst *Invoke) {
   // is void.
   Instruction *ResultAlloca = NULL;
   if (!Invoke->use_empty()) {
-    ResultAlloca = new AllocaInst(Invoke->getType(), "invoke_result_ptr");
-    Func->getEntryBlock().getInstList().push_front(ResultAlloca);
+    ResultAlloca =
+      new AllocaInst(Invoke->getType(),
+                     "invoke_result_ptr",
+                     Func->getEntryBlock().getFirstNonPHIOrDbgOrLifetime());
   }
 
   // Create type for the helper function.
@@ -372,8 +380,49 @@ void FuncRewriter::expandInvokeInst(InvokeInst *Invoke) {
 void FuncRewriter::expandResumeInst(ResumeInst *Resume) {
   if (!EHResumeFunc) {
     EHResumeFunc = Func->getParent()->getFunction("__pnacl_eh_resume");
-    if (!EHResumeFunc)
-      report_fatal_error("__pnacl_eh_resume() not defined");
+    if (!EHResumeFunc) {
+      // FIXME: This doesn't filter catches. Rust code can't catch, so this
+      // shouldn't be a problem in the short term.
+
+      Module* M = Func->getParent();
+      LLVMContext& C = M->getContext();
+      EHResumeFunc =
+        Function::Create(FunctionType::get(Type::getVoidTy(C),
+                                           std::vector<Type*>(1,
+                                                              Type::getInt8Ty(C)->getPointerTo()),
+                                           false),
+                         GlobalValue::InternalLinkage,
+                         "__pnacl_eh_resume");
+      M->getFunctionList().insertAfter(Func, EHResumeFunc);
+
+      EHResumeFunc->setDoesNotReturn();
+
+      BasicBlock* Entry = BasicBlock::Create(C, "entry", EHResumeFunc);
+
+      IntegerType* I32 = Type::getInt32Ty(M->getContext());
+
+      Value* EHStackTlsVar = M->getGlobalVariable("__pnacl_eh_stack");
+      if(EHStackTlsVar->getType() != ExceptionFrameTy->getPointerTo()->getPointerTo())
+        EHStackTlsVar =
+          new BitCastInst(EHStackTlsVar,
+                          ExceptionFrameTy->getPointerTo()->getPointerTo(),
+                          "pnacl_eh_stack");
+
+      LoadInst* EHStackTlsVarLoad = new LoadInst(EHStackTlsVar, "", Entry);
+
+      Value *JmpBufIndexes[] = { ConstantInt::get(I32, 0),
+                                 ConstantInt::get(I32, 0),
+                                 ConstantInt::get(I32, 0) };
+      Instruction* FrameJmpBufPtr = GetElementPtrInst::Create(EHStackTlsVarLoad,
+                                                              JmpBufIndexes,
+                                                              "",
+                                                              Entry);
+
+      Function* LongJmp = Intrinsic::getDeclaration(M, Intrinsic::nacl_longjmp);
+      Value* LongJmpArgs[] = { FrameJmpBufPtr, ConstantInt::get(I32, 1) };
+      CallInst::Create(LongJmp, LongJmpArgs, "", Entry);
+      new UnreachableInst(C, Entry);
+    }
   }
 
   // The "resume" instruction gets passed the landingpad's full result
@@ -389,7 +438,8 @@ void FuncRewriter::expandResumeInst(ResumeInst *Resume) {
   if (EHResumeFunc->getFunctionType()->getFunctionNumParams() != 1)
     report_fatal_error("Bad type for __pnacl_eh_resume()");
   Type *ArgType = EHResumeFunc->getFunctionType()->getFunctionParamType(0);
-  ExceptionPtr = new BitCastInst(ExceptionPtr, ArgType, "resume_cast", Resume);
+  if(ArgType != ExceptionPtr->getType())
+    ExceptionPtr = new BitCastInst(ExceptionPtr, ArgType, "resume_cast", Resume);
 
   Value *Args[] = { ExceptionPtr };
   CopyDebug(CallInst::Create(EHResumeFunc, Args, "", Resume), Resume);

@@ -34,8 +34,10 @@ define void @call_attrs() {
 ; declarations because the reader automatically inserts attributes
 ; based on built-in knowledge of intrinsics, so it is difficult to get
 ; rid of them here.
+; Actually, we have to remove these attrs. If we don't, the IR Rust passes to pnacl-clang
+; will have unknown attributes.
 declare i8* @llvm.nacl.read.tp()
-; CHECK: declare i8* @llvm.nacl.read.tp() #{{[0-9]+}}
+; CHECK: declare i8* @llvm.nacl.read.tp()
 
 define void @arithmetic_attrs() {
   %add = add nsw i32 1, 2
@@ -102,8 +104,14 @@ define void @reduce_alignment_assumptions() {
 ; CHECK-NEXT: store atomic i32 100, i32* null seq_cst, align 4
 
 declare void @llvm.memcpy.p0i8.p0i8.i32(i8*, i8*, i32, i32, i1)
+; CHECK-NOT: declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8* nocapture readonly, i32, i32, i1)
+; CHECK: declare void @llvm.memcpy.p0i8.p0i8.i32(i8*, i8*, i32, i32, i1)
 declare void @llvm.memmove.p0i8.p0i8.i32(i8*, i8*, i32, i32, i1)
+; CHECK-NOT: declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8* nocapture readonly, i32, i32, i1)
+; CHECK: declare void @llvm.memmove.p0i8.p0i8.i32(i8*, i8*, i32, i32, i1)
 declare void @llvm.memset.p0i8.i32(i8*, i8, i32, i32, i1)
+; CHECK-NOT: declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8, i32, i32, i1)
+; CHECK: declare void @llvm.memset.p0i8.i32(i8*, i8, i32, i32, i1)
 
 define void @reduce_memcpy_alignment_assumptions(i8* %ptr) {
   call void @llvm.memcpy.p0i8.p0i8.i32(i8* %ptr, i8* %ptr,

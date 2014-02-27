@@ -223,7 +223,9 @@ bool StripAttributes::runOnModule(Module &M) {
     // constructor for Functions just adds them back again.  It would
     // be confusing if the attributes were sometimes present on
     // intrinsics and sometimes not.
-    if (!Func->isIntrinsic()) {
+    // I'm disabling this check for the time being, until I have Rust building pexes directly
+    // instead, that is, of just passing translated IR to pnacl-clang.
+    if (true || !Func->isIntrinsic()) {
       stripGlobalValueAttrs(Func);
       stripFunctionAttrs(&DL, Func);
     }

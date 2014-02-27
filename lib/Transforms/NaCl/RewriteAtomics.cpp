@@ -28,41 +28,48 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/NaCl.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include <climits>
 #include <string>
 
 using namespace llvm;
 
+template <class T> 
+std::string ToStr(const T &V);
+
 namespace {
-class RewriteAtomics : public ModulePass {
+  class RewriteAtomics :
+    public ModulePass,
+    public InstVisitor<RewriteAtomics> {
 public:
   static char ID; // Pass identification, replacement for typeid
-  RewriteAtomics() : ModulePass(ID) {
+    RewriteAtomics()
+      : ModulePass(ID)
+      , M(NULL)
+      , TD(NULL)
+      , C(NULL)
+      , ModifiedModule(false)
+      , AI(NULL) {
     // This is a module pass because it may have to introduce
     // intrinsic declarations into the module and modify a global function.
     initializeRewriteAtomicsPass(*PassRegistry::getPassRegistry());
   }
+    Module* M;
+    const DataLayout* TD;
+    LLVMContext* C;
+    bool ModifiedModule;
+    NaCl::AtomicIntrinsics* AI;
 
+    // NAnd atomics require a bit more surgery than what InstVisitor can cope with.
+    typedef std::vector<AtomicRMWInst*>::iterator delayed_iterator;
+    std::vector<AtomicRMWInst*> m_delayed;
+    
   virtual bool runOnModule(Module &M);
   virtual void getAnalysisUsage(AnalysisUsage &Info) const {
     Info.addRequired<DataLayout>();
   }
-};
 
-template <class T> std::string ToStr(const T &V) {
-  std::string S;
-  raw_string_ostream OS(S);
-  OS << const_cast<T &>(V);
-  return OS.str();
-}
-
-class AtomicVisitor : public InstVisitor<AtomicVisitor> {
-public:
-  AtomicVisitor(Module &M, Pass &P)
-      : M(M), C(M.getContext()), TD(P.getAnalysis<DataLayout>()), AI(C),
-        ModifiedModule(false) {}
-  ~AtomicVisitor() {}
-  bool modifiedModule() const { return ModifiedModule; }
+  inline bool modifiedModule() const { return ModifiedModule; }
 
   void visitLoadInst(LoadInst &I);
   void visitStoreInst(StoreInst &I);
@@ -71,15 +78,8 @@ public:
   void visitFenceInst(FenceInst &I);
 
 private:
-  Module &M;
-  LLVMContext &C;
-  const DataLayout TD;
-  NaCl::AtomicIntrinsics AI;
-  bool ModifiedModule;
 
-  AtomicVisitor() LLVM_DELETED_FUNCTION;
-  AtomicVisitor(const AtomicVisitor &) LLVM_DELETED_FUNCTION;
-  AtomicVisitor &operator=(const AtomicVisitor &) LLVM_DELETED_FUNCTION;
+    void rewriteRMWNandInst(AtomicRMWInst& I);
 
   /// Create an integer constant holding a NaCl::MemoryOrder that can be
   /// passed as an argument to one of the @llvm.nacl.atomic.*
@@ -100,8 +100,19 @@ private:
   void checkAlignment(const Instruction &I, unsigned ByteAlignment,
                       unsigned ByteSize) const;
 
-  /// Create a cast before Instruction \p I from \p Src to \p Dst with \p Name.
-  CastInst *createCast(Instruction &I, Value *Src, Type *Dst, Twine Name) const;
+    /// Create a cast before Instruction \p I from \p Src to \p Dst with \p Name.
+    inline CastInst *createCast(Instruction &I,
+                                Value *Src,
+                                Type *Dst,
+                                Twine Name) const {
+      return createCast(I, Src, Dst, Name, &I);
+    }
+    template <class CastInsertion>
+    CastInst *createCast(Instruction &I,
+                         Value *Src,
+                         Type *Dst,
+                         Twine Name,
+                         CastInsertion* CastWhere) const;
 
   /// Helper function which rewrites a single instruction \p I to a
   /// particular intrinsic \p ID with overloaded type \p OverloadedType,
@@ -118,7 +129,10 @@ private:
     Type *OriginalPET;
     Type *PET;
     unsigned BitSize;
-    PointerHelper(const AtomicVisitor &AV, Instruction &I)
+    template <class CastInsertion>
+    PointerHelper(const RewriteAtomics* const AV,
+                  Instruction &I,
+                  CastInsertion* CastWhere)
         : P(I.getPointerOperand()) {
       if (I.getPointerAddressSpace() != 0)
         report_fatal_error("unhandled pointer address space " +
@@ -126,21 +140,27 @@ private:
                            ToStr(I));
       assert(P->getType()->isPointerTy() && "expected a pointer");
       PET = OriginalPET = P->getType()->getPointerElementType();
-      BitSize = AV.TD.getTypeSizeInBits(OriginalPET);
+      BitSize = AV->TD->getTypeSizeInBits(OriginalPET);
       if (!OriginalPET->isIntegerTy()) {
         // The pointer wasn't to an integer type. We define atomics in
         // terms of integers, so bitcast the pointer to an integer of
         // the proper width.
-        Type *IntNPtr = Type::getIntNPtrTy(AV.C, BitSize);
-        P = AV.createCast(I, P, IntNPtr, P->getName() + ".cast");
+        Type *IntNPtr = Type::getIntNPtrTy(*AV->C, BitSize);
+        P = AV->createCast(I, P, IntNPtr, P->getName() + ".cast");
         PET = P->getType()->getPointerElementType();
       }
-      AV.checkSizeMatchesType(I, BitSize, PET);
+      AV->checkSizeMatchesType(I, BitSize, PET);
     }
   };
 };
 }
 
+template <class T> std::string ToStr(const T &V) {
+  std::string S;
+  raw_string_ostream OS(S);
+  OS << const_cast<T &>(V);
+  return OS.str();
+}
 char RewriteAtomics::ID = 0;
 INITIALIZE_PASS(RewriteAtomics, "nacl-rewrite-atomics",
                 "rewrite atomics, volatiles and fences into stable "
@@ -148,13 +168,88 @@ INITIALIZE_PASS(RewriteAtomics, "nacl-rewrite-atomics",
                 false, false)
 
 bool RewriteAtomics::runOnModule(Module &M) {
-  AtomicVisitor AV(M, *this);
-  AV.visit(M);
-  return AV.modifiedModule();
+  const DataLayout DL(getAnalysis<DataLayout>());
+  this->TD = &DL;
+  this->M  = &M;
+  this->C  = &M.getContext();
+  NaCl::AtomicIntrinsics AI(*C);
+  this->AI = &AI;
+
+  visit(M);
+  
+  const delayed_iterator end = m_delayed.end();
+  for(delayed_iterator i = m_delayed.begin(); i != end; ++i) {
+    rewriteRMWNandInst(**i);
+  }
+  m_delayed.clear();
+  
+  this->TD = NULL;
+  this->M  = NULL;
+  this->C  = NULL;
+  this->AI = NULL;
+  return modifiedModule();
+}
+
+void RewriteAtomics::rewriteRMWNandInst(AtomicRMWInst& I) {
+  ModifiedModule = true;
+  // this excerpt from PointerHelper is here because the initial
+  // atomic load needs to be placed in the same block as the
+  // pointer operand.
+  if (I.getPointerAddressSpace() != 0) {
+    report_fatal_error("unhandled pointer address space " +
+                       Twine(I.getPointerAddressSpace()) + " for atomic: " +
+                       ToStr(I));
+  }
+  Function* ThisFun = I.getParent()->getParent();
+
+  BasicBlock* ThisBlock = I.getParent();
+  BasicBlock* InitialBlock = isa<Instruction>(I.getPointerOperand()) ?
+    cast<Instruction>(I.getPointerOperand())->getParent() : &ThisFun->getEntryBlock();
+
+  PointerHelper<AtomicRMWInst> PH(this, I, InitialBlock);
+
+  Function* LoadF = AI->find(Intrinsic::nacl_atomic_load, PH.PET)->getDeclaration(M);
+  Value* LoadCallArgs[] = {PH.P, freezeMemoryOrder(I)};
+  CallInst* LoadCall = CopyDebug(CallInst::Create(LoadF, LoadCallArgs, "", &I), &I);
+    
+  BasicBlock* CmpXchgLoop = SplitBlock(ThisBlock, &I, this);
+  PHINode* Loop = CopyDebug(PHINode::Create(PH.PET, 2, "", CmpXchgLoop->begin()), &I);
+  Loop->addIncoming(LoadCall, ThisBlock);
+
+  BinaryOperator* NotOp = CopyDebug(BinaryOperator::CreateNot(LoadCall, "", &I), &I);
+  BinaryOperator* AndOp = CopyDebug(BinaryOperator::Create(Instruction::And,
+                                                           NotOp,
+                                                           I.getValOperand(),
+                                                           "",
+                                                           &I), &I);
+  Function* CmpXchgF = AI->find(Intrinsic::nacl_atomic_cmpxchg, PH.PET)->getDeclaration(M);
+  Value* CmpXchgArgs[] = {PH.P, Loop, AndOp,
+                          freezeMemoryOrder(I),
+                          freezeMemoryOrder(I)};
+  CallInst* CmpXchg = CopyDebug(CallInst::Create(CmpXchgF, CmpXchgArgs, "", &I), &I);
+  ICmpInst* Cmp = CopyDebug(new ICmpInst(&I, CmpInst::ICMP_EQ, CmpXchg, AndOp), &I);
+  BasicBlock* Rest = SplitBlock(CmpXchgLoop, &I, this);
+  BranchInst* LoopBranch = cast<BranchInst>(CmpXchgLoop->getTerminator());
+  LoopBranch->dropAllReferences();
+  LoopBranch->eraseFromParent();
+  LoopBranch = CopyDebug(BranchInst::Create(Rest, CmpXchgLoop, Cmp, CmpXchgLoop), &I);
+  Loop->addIncoming(CmpXchg, CmpXchgLoop);
+
+  PHINode* PhiRest = CopyDebug(PHINode::Create(PH.PET, 1, "", Rest->begin()), &I);
+  PhiRest->addIncoming(CmpXchg, CmpXchgLoop);
+
+  Instruction* Res;
+  if(PH.PET != PH.OriginalPET) {
+    Res = CopyDebug(createCast(I, PhiRest, PH.OriginalPET, I.getName() + ".cast"), &I);
+  } else
+    Res = PhiRest;
+
+  I.replaceAllUsesWith(Res);
+  I.eraseFromParent();
 }
 
 template <class Instruction>
-ConstantInt *AtomicVisitor::freezeMemoryOrder(const Instruction &I) const {
+ConstantInt *RewriteAtomics::freezeMemoryOrder(const Instruction &I) const {
   NaCl::MemoryOrder AO = NaCl::MemoryOrderInvalid;
 
   // TODO Volatile load/store are promoted to sequentially consistent
@@ -187,19 +282,19 @@ ConstantInt *AtomicVisitor::freezeMemoryOrder(const Instruction &I) const {
   // TODO For now only sequential consistency is allowed.
   AO = NaCl::MemoryOrderSequentiallyConsistent;
 
-  return ConstantInt::get(Type::getInt32Ty(C), AO);
+  return ConstantInt::get(Type::getInt32Ty(*C), AO);
 }
 
-void AtomicVisitor::checkSizeMatchesType(const Instruction &I, unsigned BitSize,
+void RewriteAtomics::checkSizeMatchesType(const Instruction &I, unsigned BitSize,
                                          const Type *T) const {
-  Type *IntType = Type::getIntNTy(C, BitSize);
+  Type *IntType = Type::getIntNTy(*C, BitSize);
   if (IntType && T == IntType)
     return;
   report_fatal_error("unsupported atomic type " + ToStr(*T) + " of size " +
                      Twine(BitSize) + " bits in: " + ToStr(I));
 }
 
-void AtomicVisitor::checkAlignment(const Instruction &I, unsigned ByteAlignment,
+void RewriteAtomics::checkAlignment(const Instruction &I, unsigned ByteAlignment,
                                    unsigned ByteSize) const {
   if (ByteAlignment < ByteSize)
     report_fatal_error("atomic load/store must be at least naturally aligned, "
@@ -208,8 +303,9 @@ void AtomicVisitor::checkAlignment(const Instruction &I, unsigned ByteAlignment,
                        Twine(ByteSize) + " bytes, in: " + ToStr(I));
 }
 
-CastInst *AtomicVisitor::createCast(Instruction &I, Value *Src, Type *Dst,
-                                    Twine Name) const {
+template <class CastInsertion>
+CastInst *RewriteAtomics::createCast(Instruction &I, Value *Src, Type *Dst,
+                                     Twine Name, CastInsertion* CastWhere) const {
   Type *SrcT = Src->getType();
   Instruction::CastOps Op = SrcT->isIntegerTy() && Dst->isPointerTy()
                                 ? Instruction::IntToPtr
@@ -220,10 +316,10 @@ CastInst *AtomicVisitor::createCast(Instruction &I, Value *Src, Type *Dst,
     report_fatal_error("cannot emit atomic instruction while converting type " +
                        ToStr(*SrcT) + " to " + ToStr(*Dst) + " for " + Name +
                        " in " + ToStr(I));
-  return CastInst::Create(Op, Src, Dst, Name, &I);
+  return CastInst::Create(Op, Src, Dst, Name, CastWhere);
 }
 
-void AtomicVisitor::replaceInstructionWithIntrinsicCall(
+void RewriteAtomics::replaceInstructionWithIntrinsicCall(
     Instruction &I, Intrinsic::ID ID, Type *DstType, Type *OverloadedType,
     ArrayRef<Value *> Args) {
   std::string Name(I.getName());
@@ -243,10 +339,10 @@ void AtomicVisitor::replaceInstructionWithIntrinsicCall(
 ///   %res = load {atomic|volatile} T* %ptr memory_order, align sizeof(T)
 /// becomes:
 ///   %res = call T @llvm.nacl.atomic.load.i<size>(%ptr, memory_order)
-void AtomicVisitor::visitLoadInst(LoadInst &I) {
+void RewriteAtomics::visitLoadInst(LoadInst &I) {
   if (I.isSimple())
     return;
-  PointerHelper<LoadInst> PH(*this, I);
+  PointerHelper<LoadInst> PH(this, I, &I);
   checkAlignment(I, I.getAlignment(), PH.BitSize / CHAR_BIT);
   Value *Args[] = { PH.P, freezeMemoryOrder(I) };
   replaceInstructionWithIntrinsicCall(I, Intrinsic::nacl_atomic_load,
@@ -256,10 +352,10 @@ void AtomicVisitor::visitLoadInst(LoadInst &I) {
 ///   store {atomic|volatile} T %val, T* %ptr memory_order, align sizeof(T)
 /// becomes:
 ///   call void @llvm.nacl.atomic.store.i<size>(%val, %ptr, memory_order)
-void AtomicVisitor::visitStoreInst(StoreInst &I) {
+void RewriteAtomics::visitStoreInst(StoreInst &I) {
   if (I.isSimple())
     return;
-  PointerHelper<StoreInst> PH(*this, I);
+  PointerHelper<StoreInst> PH(this, I, &I);
   checkAlignment(I, I.getAlignment(), PH.BitSize / CHAR_BIT);
   Value *V = I.getValueOperand();
   if (!V->getType()->isIntegerTy()) {
@@ -279,7 +375,7 @@ void AtomicVisitor::visitStoreInst(StoreInst &I) {
 ///   %res = atomicrmw OP T* %ptr, T %val memory_order
 /// becomes:
 ///   %res = call T @llvm.nacl.atomic.rmw.i<size>(OP, %ptr, %val, memory_order)
-void AtomicVisitor::visitAtomicRMWInst(AtomicRMWInst &I) {
+void RewriteAtomics::visitAtomicRMWInst(AtomicRMWInst &I) {
   NaCl::AtomicRMWOperation Op;
   switch (I.getOperation()) {
   default: report_fatal_error("unsupported atomicrmw operation: " + ToStr(I));
@@ -289,10 +385,12 @@ void AtomicVisitor::visitAtomicRMWInst(AtomicRMWInst &I) {
   case AtomicRMWInst::Or:  Op = NaCl::AtomicOr;  break;
   case AtomicRMWInst::Xor: Op = NaCl::AtomicXor; break;
   case AtomicRMWInst::Xchg: Op = NaCl::AtomicExchange; break;
+  case AtomicRMWInst::Nand: m_delayed.push_back(&I); return;
   }
-  PointerHelper<AtomicRMWInst> PH(*this, I);
+
+  PointerHelper<AtomicRMWInst> PH(this, I, &I);
   checkSizeMatchesType(I, PH.BitSize, I.getValOperand()->getType());
-  Value *Args[] = { ConstantInt::get(Type::getInt32Ty(C), Op), PH.P,
+  Value *Args[] = { ConstantInt::get(Type::getInt32Ty(*C), Op), PH.P,
                     I.getValOperand(), freezeMemoryOrder(I) };
   replaceInstructionWithIntrinsicCall(I, Intrinsic::nacl_atomic_rmw,
                                       PH.OriginalPET, PH.PET, Args);
@@ -303,8 +401,8 @@ void AtomicVisitor::visitAtomicRMWInst(AtomicRMWInst &I) {
 ///   %res = call T @llvm.nacl.atomic.cmpxchg.i<size>(
 ///       %object, %expected, %desired, memory_order_success,
 ///       memory_order_failure)
-void AtomicVisitor::visitAtomicCmpXchgInst(AtomicCmpXchgInst &I) {
-  PointerHelper<AtomicCmpXchgInst> PH(*this, I);
+void RewriteAtomics::visitAtomicCmpXchgInst(AtomicCmpXchgInst &I) {
+  PointerHelper<AtomicCmpXchgInst> PH(this, I, &I);
   checkSizeMatchesType(I, PH.BitSize, I.getCompareOperand()->getType());
   checkSizeMatchesType(I, PH.BitSize, I.getNewValOperand()->getType());
   // TODO LLVM currently doesn't support specifying separate memory
@@ -329,8 +427,8 @@ void AtomicVisitor::visitAtomicCmpXchgInst(AtomicCmpXchgInst &I) {
 ///   call void @llvm.nacl.atomic.fence.all()
 ///   call void asm sideeffect "", "~{memory}"()
 /// Note that the assembly gets eliminated by the -remove-asm-memory pass.
-void AtomicVisitor::visitFenceInst(FenceInst &I) {
-  Type *T = Type::getInt32Ty(C); // Fences aren't overloaded on type.
+void RewriteAtomics::visitFenceInst(FenceInst &I) {
+  Type *T = Type::getInt32Ty(*C); // Fences aren't overloaded on type.
   BasicBlock::InstListType &IL(I.getParent()->getInstList());
   bool isFirst = IL.empty() || &*I.getParent()->getInstList().begin() == &I;
   bool isLast = IL.empty() || &*I.getParent()->getInstList().rbegin() == &I;

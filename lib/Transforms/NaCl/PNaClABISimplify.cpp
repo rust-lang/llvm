@@ -27,7 +27,7 @@ EnableSjLjEH("enable-pnacl-sjlj-eh",
                       "as part of the pnacl-abi-simplify passes"),
              cl::init(false));
 
-void llvm::PNaClABISimplifyAddPreOptPasses(PassManager &PM) {
+void llvm::PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM) {
   if (EnableSjLjEH) {
     // This comes before ExpandTls because it introduces references to
     // a TLS variable, __pnacl_eh_stack.  This comes before
@@ -55,6 +55,14 @@ void llvm::PNaClABISimplifyAddPreOptPasses(PassManager &PM) {
 
   // Expand out some uses of struct types.
   PM.add(createExpandArithWithOverflowPass());
+
+  // This small collection of passes is targeted toward Rust generated IR
+  // solely for the purpose of helping later NaCl transformations handle the
+  // high number of structures Rust outputs.
+  PM.add(createPromoteSimpleStructsPass());
+  PM.add(createPromoteReturnedStructsPass());
+  PM.add(createPromoteStructureArgsPass());
+
   // ExpandStructRegs must be run after ExpandArithWithOverflow to
   // expand out the insertvalue instructions that
   // ExpandArithWithOverflow introduces.
@@ -69,7 +77,8 @@ void llvm::PNaClABISimplifyAddPreOptPasses(PassManager &PM) {
   PM.add(createGlobalCleanupPass());
 }
 
-void llvm::PNaClABISimplifyAddPostOptPasses(PassManager &PM) {
+void llvm::PNaClABISimplifyAddPostOptPasses(PassManagerBase &PM) {
+
   PM.add(createRewritePNaClLibraryCallsPass());
 
   // We place ExpandByVal after optimization passes because some byval
@@ -103,18 +112,23 @@ void llvm::PNaClABISimplifyAddPostOptPasses(PassManager &PM) {
   // We should not place arbitrary passes after ExpandConstantExpr
   // because they might reintroduce ConstantExprs.
   PM.add(createExpandConstantExprPass());
+
   // PromoteIntegersPass does not handle constexprs and creates GEPs,
   // so it goes between those passes.
   PM.add(createPromoteIntegersPass());
+
   // ExpandGetElementPtr must follow ExpandConstantExpr to expand the
   // getelementptr instructions it creates.
   PM.add(createExpandGetElementPtrPass());
+
   // Rewrite atomic and volatile instructions with intrinsic calls.
   PM.add(createRewriteAtomicsPass());
+
   // Remove ``asm("":::"memory")``. This must occur after rewriting
   // atomics: a ``fence seq_cst`` surrounded by ``asm("":::"memory")``
   // has special meaning and is translated differently.
   PM.add(createRemoveAsmMemoryPass());
+
   // ReplacePtrsWithInts assumes that getelementptr instructions and
   // ConstantExprs have already been expanded out.
   PM.add(createReplacePtrsWithIntsPass());
@@ -134,4 +148,11 @@ void llvm::PNaClABISimplifyAddPostOptPasses(PassManager &PM) {
   // created.
   PM.add(createDeadInstEliminationPass());
   PM.add(createDeadCodeEliminationPass());
+
+  // Remove superfluous [0 x i8] and some [2 x i8] left over.
+  PM.add(createReplaceAggregatesWithIntsPass());
+
+  // Remove additional instructions killed by ReplaceArraysWithInts.
+  PM.add(createDeadInstEliminationPass());
+
 }

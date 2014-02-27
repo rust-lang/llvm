@@ -21,7 +21,6 @@ class FunctionPass;
 class FunctionType;
 class Instruction;
 class ModulePass;
-class PassManager;
 class Use;
 class Value;
 
@@ -33,6 +32,9 @@ FunctionPass *createInsertDivideCheckPass();
 FunctionPass *createPromoteIntegersPass();
 FunctionPass *createRemoveAsmMemoryPass();
 FunctionPass *createResolvePNaClIntrinsicsPass();
+FunctionPass *createReplaceAggregatesWithIntsPass();
+ModulePass *createPromoteReturnedStructsPass();
+ModulePass *createPromoteStructureArgsPass();
 ModulePass *createAddPNaClExternalDeclsPass();
 ModulePass *createCanonicalizeMemIntrinsicsPass();
 ModulePass *createExpandArithWithOverflowPass();
@@ -45,6 +47,7 @@ ModulePass *createExpandVarArgsPass();
 ModulePass *createFlattenGlobalsPass();
 ModulePass *createGlobalCleanupPass();
 ModulePass *createPNaClSjLjEHPass();
+ModulePass *createPromoteSimpleStructsPass();
 ModulePass *createReplacePtrsWithIntsPass();
 ModulePass *createResolveAliasesPass();
 ModulePass *createRewriteAtomicsPass();
@@ -53,8 +56,8 @@ ModulePass *createRewritePNaClLibraryCallsPass();
 ModulePass *createStripAttributesPass();
 ModulePass *createStripMetadataPass();
 
-void PNaClABISimplifyAddPreOptPasses(PassManager &PM);
-void PNaClABISimplifyAddPostOptPasses(PassManager &PM);
+void PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM);
+void PNaClABISimplifyAddPostOptPasses(PassManagerBase &PM);
 
 Instruction *PhiSafeInsertPt(Use *U);
 void PhiSafeReplaceUses(Use *U, Value *NewVal);

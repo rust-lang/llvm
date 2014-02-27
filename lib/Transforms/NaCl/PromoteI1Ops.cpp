@@ -25,10 +25,6 @@
 //    of "and", "or" and "xor", because these are used in practice and
 //    don't overflow.
 //
-// "switch" instructions on i1 are also disallowed by the PNaCl ABI
-// verifier, but they don't seem to be generated in practice and so
-// they are not currently expanded out by this pass.
-//
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/BasicBlock.h"
@@ -70,6 +66,43 @@ bool PromoteI1Ops::runOnBasicBlock(BasicBlock &BB) {
 
   Type *I1Ty = Type::getInt1Ty(BB.getContext());
   Type *I8Ty = Type::getInt8Ty(BB.getContext());
+
+  // Rewrite boolean Switch terminators:
+  if(isa<SwitchInst>(BB.getTerminator())) {
+    SwitchInst* Inst = cast<SwitchInst>(BB.getTerminator());
+    Value* Condition = Inst->getCondition();
+    Type* ConditionTy = Condition->getType();
+    if(ConditionTy->isIntegerTy(1)) {
+      ConstantInt* False = cast<ConstantInt>(ConstantInt::getFalse(ConditionTy));
+      ConstantInt* True  = cast<ConstantInt>(ConstantInt::getTrue(ConditionTy));
+      SwitchInst::CaseIt FalseCase = Inst->findCaseValue(False);
+      SwitchInst::CaseIt TrueCase  = Inst->findCaseValue(True);
+
+      BasicBlock* FalseBlock = FalseCase.getCaseSuccessor();
+      BasicBlock* TrueBlock  = TrueCase.getCaseSuccessor();
+
+      BasicBlock* DefaultDest = Inst->getDefaultDest();
+      if(TrueBlock == NULL) {
+        TrueBlock = DefaultDest;
+        assert(TrueBlock != NULL);
+      } else if(FalseBlock == NULL) {
+        FalseBlock = DefaultDest;
+        assert(FalseBlock != NULL);
+      } else if(DefaultDest != NULL &&
+                DefaultDest != TrueBlock &&
+                DefaultDest != FalseBlock){
+        // impossible destination
+        DefaultDest->removePredecessor(Inst->getParent());
+      }
+
+      CopyDebug(BranchInst::Create(TrueBlock,
+                                   FalseBlock,
+                                   Condition,
+                                   Inst),
+                Inst);
+      Inst->eraseFromParent();
+    }
+  }
 
   for (BasicBlock::iterator Iter = BB.begin(), E = BB.end(); Iter != E; ) {
     Instruction *Inst = Iter++;
