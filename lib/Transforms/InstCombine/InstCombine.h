@@ -86,6 +86,8 @@ class LLVM_LIBRARY_VISIBILITY InstCombiner
   bool MadeIRChange;
   LibCallSimplifier *Simplifier;
   bool MinimizeSize;
+  /// Are we allowed to add llvm.*.with.overflow.*?
+  bool NoOverflowSafeArithmetric;
 public:
   /// Worklist - All of the instructions that need to be simplified.
   InstCombineWorklist Worklist;

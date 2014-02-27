@@ -1,0 +1,33 @@
+add_llvm_library(LLVMNaClTransforms
+  AddPNaClExternalDecls.cpp
+  CanonicalizeMemIntrinsics.cpp
+  ExceptionInfoWriter.cpp
+  ExpandArithWithOverflow.cpp
+  ExpandByVal.cpp
+  ExpandConstantExpr.cpp
+  ExpandCtors.cpp
+  ExpandGetElementPtr.cpp
+  ExpandSmallArguments.cpp
+  ExpandStructRegs.cpp
+  ExpandTls.cpp
+  ExpandTlsConstantExpr.cpp
+  ExpandUtils.cpp
+  ExpandVarArgs.cpp
+  FlattenGlobals.cpp
+  GlobalCleanup.cpp
+  InsertDivideCheck.cpp
+  PNaClABISimplify.cpp
+  PNaClSjLjEH.cpp
+  PromoteI1Ops.cpp
+  PromoteIntegers.cpp
+  RemoveAsmMemory.cpp
+  ReplacePtrsWithInts.cpp
+  ResolvePNaClIntrinsics.cpp
+  RewriteAtomics.cpp
+  RewriteLLVMIntrinsics.cpp
+  RewritePNaClLibraryCalls.cpp
+  StripAttributes.cpp
+  StripMetadata.cpp
+  )
+
+add_dependencies(LLVMNaClTransforms intrinsics_gen)

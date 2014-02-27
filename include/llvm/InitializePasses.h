@@ -268,6 +268,42 @@ void initializeSLPVectorizerPass(PassRegistry&);
 void initializeBBVectorizePass(PassRegistry&);
 void initializeMachineFunctionPrinterPassPass(PassRegistry&);
 void initializeStackMapLivenessPass(PassRegistry&);
+// @LOCALMOD-BEGIN
+void initializeAddPNaClExternalDeclsPass(PassRegistry&);
+void initializeCanonicalizeMemIntrinsicsPass(PassRegistry&);
+void initializeExpandArithWithOverflowPass(PassRegistry&);
+void initializeExpandByValPass(PassRegistry&);
+void initializeExpandConstantExprPass(PassRegistry&);
+void initializeExpandCtorsPass(PassRegistry&);
+void initializeExpandGetElementPtrPass(PassRegistry&);
+void initializeExpandSmallArgumentsPass(PassRegistry&);
+void initializeExpandStructRegsPass(PassRegistry&);
+void initializeExpandTlsConstantExprPass(PassRegistry&);
+void initializeExpandTlsPass(PassRegistry&);
+void initializeExpandVarArgsPass(PassRegistry&);
+void initializeFlattenGlobalsPass(PassRegistry&);
+void initializeGlobalCleanupPass(PassRegistry&);
+void initializeInsertDivideCheckPass(PassRegistry&);
+void initializeNaClCcRewritePass(PassRegistry&);
+void initializePNaClABIVerifyFunctionsPass(PassRegistry&);
+void initializePNaClABIVerifyModulePass(PassRegistry&);
+void initializePNaClSjLjEHPass(PassRegistry&);
+void initializePromoteI1OpsPass(PassRegistry&);
+void initializePromoteIntegersPass(PassRegistry&);
+void initializePromoteSimpleStructsPass(PassRegistry&);
+void initializePromoteReturnedStructsPass(PassRegistry&);
+void initializePromoteStructureArgsPass(PassRegistry&);
+void initializeReplaceAggregatesWithIntsPass(PassRegistry&);
+void initializeRemoveAsmMemoryPass(PassRegistry&);
+void initializeReplacePtrsWithIntsPass(PassRegistry&);
+void initializeResolveAliasesPass(PassRegistry&);
+void initializeResolvePNaClIntrinsicsPass(PassRegistry&);
+void initializeRewriteAtomicsPass(PassRegistry&);
+void initializeRewriteLLVMIntrinsicsPass(PassRegistry&);
+void initializeRewritePNaClLibraryCallsPass(PassRegistry&);
+void initializeStripAttributesPass(PassRegistry&);
+void initializeStripMetadataPass(PassRegistry&);
+// @LOCALMOD-END
 }
 
 #endif

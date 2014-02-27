@@ -10,6 +10,7 @@ add_llvm_tool_subdirectory(llvm-dis)
 add_llvm_tool_subdirectory(llvm-mc)
 
 add_llvm_tool_subdirectory(llc)
+add_llvm_tool_subdirectory(pnacl-benchmark)
 add_llvm_tool_subdirectory(llvm-ar)
 add_llvm_tool_subdirectory(llvm-nm)
 add_llvm_tool_subdirectory(llvm-size)
@@ -38,6 +39,11 @@ add_llvm_tool_subdirectory(llvm-stress)
 add_llvm_tool_subdirectory(llvm-mcmarkup)
 
 add_llvm_tool_subdirectory(llvm-symbolizer)
+add_llvm_tool_subdirectory(pnacl-abicheck)
+add_llvm_tool_subdirectory(pnacl-bcanalyzer)
+add_llvm_tool_subdirectory(pnacl-freeze)
+add_llvm_tool_subdirectory(pnacl-bccompress)
+add_llvm_tool_subdirectory(pnacl-thaw)
 
 add_llvm_tool_subdirectory(llvm-c-test)
 

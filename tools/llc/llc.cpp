@@ -15,6 +15,8 @@
 
 
 #include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/NaCl.h" // @LOCALMOD
+#include "llvm/Bitcode/NaCl/NaClReaderWriter.h"  // @LOCALMOD
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
@@ -31,6 +33,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
+#include "llvm/Transforms/NaCl.h" // @LOCALMOD
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
@@ -42,6 +45,16 @@
 #include "llvm/Target/TargetMachine.h"
 #include <memory>
 using namespace llvm;
+
+static cl::opt<FileFormat>
+InputFileFormat(
+    "bitcode-format",
+    cl::desc("Define format of input file:"),
+    cl::values(
+        clEnumValN(LLVMFormat, "llvm", "LLVM file (default)"),
+        clEnumValN(PNaClFormat, "pnacl", "PNaCl bitcode file"),
+        clEnumValEnd),
+    cl::init(LLVMFormat));
 
 // General options for llc.  Other pass-specific options are specified
 // within the corresponding llc passes, and target-specific options
@@ -211,7 +224,7 @@ static int compileModule(char **argv, LLVMContext &Context) {
 
   // If user just wants to list available options, skip module loading
   if (!SkipModule) {
-    M.reset(ParseIRFile(InputFilename, Err, Context));
+    M.reset(ParseIRFile(InputFilename, Err, Context, InputFileFormat));
     mod = M.get();
     if (mod == 0) {
       Err.print(argv[0], errs());

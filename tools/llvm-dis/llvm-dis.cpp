@@ -18,11 +18,13 @@
 
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/NaCl/NaClReaderWriter.h"  // @LOCALMOD
 #include "llvm/DebugInfo.h"
 #include "llvm/IR/AssemblyAnnotationWriter.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IRReader/IRReader.h"  // @LOCALMOD
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/DataStream.h"
 #include "llvm/Support/FormattedStream.h"
@@ -51,6 +53,16 @@ static cl::opt<bool>
 ShowAnnotations("show-annotations",
                 cl::desc("Add informational comments to the .ll file"));
 
+
+static cl::opt<FileFormat>
+InputFileFormat(
+    "bitcode-format",
+    cl::desc("Define format of input bitcode file:"),
+    cl::values(
+        clEnumValN(LLVMFormat, "llvm", "LLVM bitcode file (default)"),
+        clEnumValN(PNaClFormat, "pnacl", "PNaCl bitcode file"),
+        clEnumValEnd),
+    cl::init(LLVMFormat));
 namespace {
 
 static void printDebugLoc(const DebugLoc &DL, formatted_raw_ostream &OS) {
@@ -133,8 +145,21 @@ int main(int argc, char **argv) {
       DisplayFilename = "<stdin>";
     else
       DisplayFilename = InputFilename;
-    M.reset(getStreamedBitcodeModule(DisplayFilename, streamer, Context,
-                                     &ErrorMessage));
+
+    switch (InputFileFormat) {
+      case LLVMFormat:
+        M.reset(getStreamedBitcodeModule(DisplayFilename, streamer, Context,
+                                         &ErrorMessage));
+        break;
+      case PNaClFormat:
+        M.reset(getNaClStreamedBitcodeModule(DisplayFilename, streamer, Context,
+                                             &ErrorMessage));
+        break;
+      default:
+        ErrorMessage = "Don't understand specified bitcode format";
+        break;
+    }
+
     if(M.get() != 0) {
       if (error_code EC = M->materializeAllPermanently()) {
         ErrorMessage = EC.message();

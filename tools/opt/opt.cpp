@@ -21,6 +21,8 @@
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/RegionPass.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
+#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/NaCl/NaClBitcodeWriterPass.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/DebugInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -47,6 +49,7 @@
 #include "llvm/Target/TargetLibraryInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/NaCl.h"  // @LOCALMOD
 #include <algorithm>
 #include <memory>
 using namespace llvm;
@@ -139,6 +142,18 @@ static cl::opt<bool>
 OptLevelO3("O3",
            cl::desc("Optimization level 3. Similar to clang -O3"));
 
+// @LOCALMOD-BEGIN
+static cl::opt<bool>
+PNaClABISimplifyPreOpt(
+    "pnacl-abi-simplify-preopt",
+    cl::desc("PNaCl ABI simplifications for before optimizations"));
+
+static cl::opt<bool>
+PNaClABISimplifyPostOpt(
+    "pnacl-abi-simplify-postopt",
+    cl::desc("PNaCl ABI simplifications for after optimizations"));
+// @LOCALMOD-END
+
 static cl::opt<std::string>
 TargetTriple("mtriple", cl::desc("Override target triple for module"));
 
@@ -183,6 +198,16 @@ static cl::opt<std::string>
 DefaultDataLayout("default-data-layout",
           cl::desc("data layout string to use if not specified by module"),
           cl::value_desc("layout-string"), cl::init(""));
+
+static cl::opt<FileFormat>
+OutputFileFormat(
+    "bitcode-format",
+    cl::desc("Define format of generated bitcode file:"),
+    cl::values(
+        clEnumValN(LLVMFormat, "llvm", "LLVM bitcode file (default)"),
+        clEnumValN(PNaClFormat, "pnacl", "PNaCl bitcode file"),
+        clEnumValEnd),
+    cl::init(LLVMFormat));
 
 namespace {
 
@@ -421,6 +446,41 @@ int main(int argc, char **argv) {
   initializeInstCombine(Registry);
   initializeInstrumentation(Registry);
   initializeTarget(Registry);
+  // @LOCALMOD-BEGIN
+  initializeAddPNaClExternalDeclsPass(Registry);
+  initializeCanonicalizeMemIntrinsicsPass(Registry);
+  initializeExpandArithWithOverflowPass(Registry);
+  initializeExpandByValPass(Registry);
+  initializeExpandConstantExprPass(Registry);
+  initializeExpandCtorsPass(Registry);
+  initializeExpandGetElementPtrPass(Registry);
+  initializeExpandSmallArgumentsPass(Registry);
+  initializeExpandStructRegsPass(Registry);
+  initializeExpandTlsConstantExprPass(Registry);
+  initializeExpandTlsPass(Registry);
+  initializeExpandVarArgsPass(Registry);
+  initializeFlattenGlobalsPass(Registry);
+  initializeGlobalCleanupPass(Registry);
+  initializeInsertDivideCheckPass(Registry);
+  initializePNaClABIVerifyFunctionsPass(Registry);
+  initializePNaClABIVerifyModulePass(Registry);
+  initializePNaClSjLjEHPass(Registry);
+  initializePromoteI1OpsPass(Registry);
+  initializePromoteIntegersPass(Registry);
+  initializePromoteSimpleStructsPass(Registry);
+  initializePromoteReturnedStructsPass(Registry);
+  initializePromoteStructureArgsPass(Registry);
+  initializeReplaceAggregatesWithIntsPass(Registry);
+  initializeRemoveAsmMemoryPass(Registry);
+  initializeReplacePtrsWithIntsPass(Registry);
+  initializeResolveAliasesPass(Registry);
+  initializeResolvePNaClIntrinsicsPass(Registry);
+  initializeRewriteAtomicsPass(Registry);
+  initializeRewriteLLVMIntrinsicsPass(Registry);
+  initializeRewritePNaClLibraryCallsPass(Registry);
+  initializeStripAttributesPass(Registry);
+  initializeStripMetadataPass(Registry);
+  // @LOCALMOD-END
 
   cl::ParseCommandLineOptions(argc, argv,
     "llvm .bc -> .bc modular optimizer and analysis printer\n");
@@ -600,6 +660,20 @@ int main(int argc, char **argv) {
       OptLevelO3 = false;
     }
 
+    // @LOCALMOD-BEGIN
+    if (PNaClABISimplifyPreOpt &&
+        PNaClABISimplifyPreOpt.getPosition() < PassList.getPosition(i)) {
+      PNaClABISimplifyAddPreOptPasses(Passes);
+      PNaClABISimplifyPreOpt = false;
+    }
+
+    if (PNaClABISimplifyPostOpt &&
+        PNaClABISimplifyPostOpt.getPosition() < PassList.getPosition(i)) {
+      PNaClABISimplifyAddPostOptPasses(Passes);
+      PNaClABISimplifyPostOpt = false;
+    }
+    // @LOCALMOD-END
+
     const PassInfo *PassInf = PassList[i];
     Pass *P = 0;
     if (PassInf->getTargetMachineCtor())
@@ -674,6 +748,14 @@ int main(int argc, char **argv) {
     FPasses->doFinalization();
   }
 
+  // @LOCALMOD-BEGIN
+  if (PNaClABISimplifyPreOpt)
+    PNaClABISimplifyAddPreOptPasses(Passes);
+
+  if (PNaClABISimplifyPostOpt)
+    PNaClABISimplifyAddPostOptPasses(Passes);
+  // @LOCALMOD-END
+
   // Check that the module is well formed on completion of optimization
   if (!NoVerify && !VerifyEach)
     Passes.add(createVerifierPass());
@@ -682,8 +764,13 @@ int main(int argc, char **argv) {
   if (!NoOutput && !AnalyzeOnly) {
     if (OutputAssembly)
       Passes.add(createPrintModulePass(Out->os()));
-    else
+    else if(OutputFileFormat == LLVMFormat)
       Passes.add(createBitcodeWriterPass(Out->os()));
+    else if(OutputFileFormat == PNaClFormat)
+      Passes.add(createNaClBitcodeWriterPass(Out->os()));
+    else {
+      llvm_unreachable("unknown bitcode format");
+    }
   }
 
   // Before executing passes, print the final values of the LLVM options.
