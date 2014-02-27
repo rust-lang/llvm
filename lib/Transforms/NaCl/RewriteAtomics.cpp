@@ -227,15 +227,13 @@ void AtomicVisitor::replaceInstructionWithIntrinsicCall(
     Instruction &I, Intrinsic::ID ID, Type *DstType, Type *OverloadedType,
     ArrayRef<Value *> Args) {
   std::string Name(I.getName());
-  Function *F = AI.find(ID, OverloadedType)->getDeclaration(&M);
-  CallInst *Call = CallInst::Create(F, Args, "", &I);
+  Function *F = AI->find(ID, OverloadedType)->getDeclaration(M);
+  CallInst *Call = CopyDebug(CallInst::Create(F, Args, "", &I), &I);
   Instruction *Res = Call;
   if (!Call->getType()->isVoidTy() && DstType != OverloadedType) {
     // The call returns a value which needs to be cast to a non-integer.
-    Res = createCast(I, Call, DstType, Name + ".cast");
-    Res->setDebugLoc(I.getDebugLoc());
+    Res = CopyDebug(createCast(I, Call, DstType, Name + ".cast"), &I);
   }
-  Call->setDebugLoc(I.getDebugLoc());
   I.replaceAllUsesWith(Res);
   I.eraseFromParent();
   Call->setName(Name);
@@ -268,9 +266,8 @@ void AtomicVisitor::visitStoreInst(StoreInst &I) {
     // The store isn't of an integer type. We define atomics in terms of
     // integers, so bitcast the value to store to an integer of the
     // proper width.
-    CastInst *Cast = createCast(I, V, Type::getIntNTy(C, PH.BitSize),
-                                V->getName() + ".cast");
-    Cast->setDebugLoc(I.getDebugLoc());
+    CastInst *Cast = CopyDebug(createCast(I, V, Type::getIntNTy(*C, PH.BitSize),
+                                          V->getName() + ".cast"), &I);
     V = Cast;
   }
   checkSizeMatchesType(I, PH.BitSize, V->getType());

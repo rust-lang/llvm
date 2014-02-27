@@ -10,6 +10,9 @@
 #ifndef LLVM_TRANSFORMS_NACL_H
 #define LLVM_TRANSFORMS_NACL_H
 
+#include "llvm/PassManager.h"
+#include "llvm/IR/LLVMContext.h"
+
 namespace llvm {
 
 class BasicBlockPass;
@@ -56,8 +59,15 @@ void PNaClABISimplifyAddPostOptPasses(PassManager &PM);
 Instruction *PhiSafeInsertPt(Use *U);
 void PhiSafeReplaceUses(Use *U, Value *NewVal);
 
-// Copy debug information from Original to NewInst, and return NewInst.
-Instruction *CopyDebug(Instruction *NewInst, Instruction *Original);
+  // Copy debug information from Original to New, and return New.
+  template <class T, class U>
+  T* CopyDebug(T* New, U* Original) {
+    if(static_cast<void*>(New) != static_cast<void*>(Original) &&
+       isa<Instruction>(New) && isa<Instruction>(Original))
+      cast<Instruction>(New)->setMetadata(LLVMContext::MD_dbg,
+                                          cast<Instruction>(Original)->getMetadata(LLVMContext::MD_dbg));
+    return New;
+  }
 
 template <class InstType>
 static void CopyLoadOrStoreAttrs(InstType *Dest, InstType *Src) {

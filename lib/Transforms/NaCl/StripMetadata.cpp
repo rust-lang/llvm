@@ -63,10 +63,15 @@ static bool DoStripMetadata(Module &M) {
     for (Function::iterator FI = MI->begin(), FE = MI->end(); FI != FE; ++FI) {
       for (BasicBlock::iterator BI = FI->begin(), BE = FI->end(); BI != BE;
            ++BI) {
+        if(!BI->hasMetadataOtherThanDebugLoc())
+          continue;  // Nothing to do.
+
         SmallVector<std::pair<unsigned, MDNode *>, 8> InstMeta;
         // Let the debug metadata be stripped by the -strip-debug pass.
-        BI->getAllMetadataOtherThanDebugLoc(InstMeta);
+        BI->getAllMetadata(InstMeta);
         for (size_t i = 0; i < InstMeta.size(); ++i) {
+          if(InstMeta[i].first == LLVMContext::MD_dbg)
+            continue;
           BI->setMetadata(InstMeta[i].first, NULL);
           Changed = true;
         }

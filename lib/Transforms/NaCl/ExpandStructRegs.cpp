@@ -119,7 +119,8 @@ static void SplitUpSelect(SelectInst *Select) {
         Select);
     Value *NewSelect = CopyDebug(
         SelectInst::Create(Select->getCondition(), TrueVal, FalseVal,
-                           Select->getName() + ".index", Select), Select);
+                           Select->getName() + ".index", Select),
+        Select);
 
     // Reconstruct the original struct value.
     NewStruct = CopyDebug(
@@ -159,9 +160,10 @@ static void SplitUpStore(StoreInst *Store) {
                                Store), Store);
     SmallVector<unsigned, 1> EVIndexes;
     EVIndexes.push_back(Index);
-    Value *Field = ExtractValueInst::Create(Store->getValueOperand(),
-                                            EVIndexes, "", Store);
-    StoreInst *NewStore = new StoreInst(Field, GEP, Store);
+    Value *Field = CopyDebug(ExtractValueInst::Create(Store->getValueOperand(),
+                                                      EVIndexes, "", Store),
+                             Store);
+    StoreInst *NewStore = CopyDebug(new StoreInst(Field, GEP, Store), Store);
     ProcessLoadOrStoreAttrs(NewStore, Store);
   }
   Store->eraseFromParent();

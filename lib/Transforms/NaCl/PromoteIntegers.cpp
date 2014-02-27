@@ -216,20 +216,24 @@ static Value *splitLoad(LoadInst *Inst, ConversionState &State) {
   IntegerType *HiType = IntegerType::get(Inst->getContext(), Width - LoWidth);
   IRBuilder<> IRB(Inst);
 
-  Value *BCLo = IRB.CreateBitCast(
-      OrigPtr,
-      LoType->getPointerTo(),
-      OrigPtr->getName() + ".loty");
-  Value *LoadLo = IRB.CreateAlignedLoad(
-      BCLo, Inst->getAlignment(), Inst->getName() + ".lo");
-  Value *LoExt = IRB.CreateZExt(LoadLo, NewType, LoadLo->getName() + ".ext");
-  Value *GEPHi = IRB.CreateConstGEP1_32(BCLo, 1, OrigPtr->getName() + ".hi");
-  Value *BCHi = IRB.CreateBitCast(
-        GEPHi,
-        HiType->getPointerTo(),
-        OrigPtr->getName() + ".hity");
+  Value *BCLo = CopyDebug(IRB.CreateBitCast(OrigPtr,
+                                            LoType->getPointerTo(),
+                                            OrigPtr->getName() + ".loty"),
+                          Inst);
+  Value *LoadLo = CopyDebug(IRB.CreateAlignedLoad(BCLo,
+                                                  Inst->getAlignment(),
+                                                  Inst->getName() + ".lo"),
+                            Inst);
+  Value *LoExt = CopyDebug(IRB.CreateZExt(LoadLo, NewType, LoadLo->getName() + ".ext"),
+                           Inst);
+  Value *GEPHi = CopyDebug(IRB.CreateConstGEP1_32(BCLo, 1, OrigPtr->getName() + ".hi"),
+                           Inst);
+  Value *BCHi = CopyDebug(IRB.CreateBitCast(GEPHi,
+                                            HiType->getPointerTo(),
+                                            OrigPtr->getName() + ".hity"),
+                          Inst);
 
-  Value *LoadHi = IRB.CreateLoad(BCHi, Inst->getName() + ".hi");
+  Value *LoadHi = CopyDebug(IRB.CreateLoad(BCHi, Inst->getName() + ".hi"), Inst);
   if (!isLegalSize(Width - LoWidth)) {
     LoadHi = splitLoad(cast<LoadInst>(LoadHi), State);
     // BCHi was still illegal, and has been replaced with a placeholder in the
@@ -238,9 +242,9 @@ static Value *splitLoad(LoadInst *Inst, ConversionState &State) {
     State.recordConverted(cast<Instruction>(BCHi), GEPHi, /*TakeName=*/false);
   }
 
-  Value *HiExt = IRB.CreateZExt(LoadHi, NewType, LoadHi->getName() + ".ext");
-  Value *HiShift = IRB.CreateShl(HiExt, LoWidth, HiExt->getName() + ".sh");
-  Value *Result = IRB.CreateOr(LoExt, HiShift);
+  Value *HiExt = CopyDebug(IRB.CreateZExt(LoadHi, NewType, LoadHi->getName() + ".ext"), Inst);
+  Value *HiShift = CopyDebug(IRB.CreateShl(HiExt, LoWidth, HiExt->getName() + ".sh"), Inst);
+  Value *Result = CopyDebug(IRB.CreateOr(LoExt, HiShift), Inst);
 
   State.recordConverted(Inst, Result);
 
@@ -268,25 +272,24 @@ static Value *splitStore(StoreInst *Inst, ConversionState &State) {
   IntegerType *HiType = IntegerType::get(Inst->getContext(), Width - LoWidth);
   IRBuilder<> IRB(Inst);
 
-  Value *BCLo = IRB.CreateBitCast(
-      OrigPtr,
-      LoType->getPointerTo(),
-      OrigPtr->getName() + ".loty");
-  Value *LoTrunc = IRB.CreateTrunc(
-      OrigVal, LoType, OrigVal->getName() + ".lo");
-  IRB.CreateAlignedStore(LoTrunc, BCLo, Inst->getAlignment());
+  Value *BCLo = CopyDebug(IRB.CreateBitCast(OrigPtr,
+                                            LoType->getPointerTo(),
+                                            OrigPtr->getName() + ".loty"),
+                          Inst);
+  Value *LoTrunc = CopyDebug(IRB.CreateTrunc(OrigVal, LoType, OrigVal->getName() + ".lo"),
+                             Inst);
+  CopyDebug(IRB.CreateAlignedStore(LoTrunc, BCLo, Inst->getAlignment()), Inst);
 
-  Value *HiLShr = IRB.CreateLShr(
-      OrigVal, LoWidth, OrigVal->getName() + ".hi.sh");
-  Value *GEPHi = IRB.CreateConstGEP1_32(BCLo, 1, OrigPtr->getName() + ".hi");
-  Value *HiTrunc = IRB.CreateTrunc(
-      HiLShr, HiType, OrigVal->getName() + ".hi");
-  Value *BCHi = IRB.CreateBitCast(
-        GEPHi,
-        HiType->getPointerTo(),
-        OrigPtr->getName() + ".hity");
+  Value *HiLShr = CopyDebug(IRB.CreateLShr(OrigVal, LoWidth, OrigVal->getName() + ".hi.sh"),
+                            Inst);
+  Value *GEPHi = CopyDebug(IRB.CreateConstGEP1_32(BCLo, 1, OrigPtr->getName() + ".hi"), Inst);
+  Value *HiTrunc = CopyDebug(IRB.CreateTrunc(HiLShr, HiType, OrigVal->getName() + ".hi"), Inst);
+  Value *BCHi = CopyDebug(IRB.CreateBitCast(GEPHi,
+                                            HiType->getPointerTo(),
+                                            OrigPtr->getName() + ".hity"),
+                          Inst);
 
-  Value *StoreHi = IRB.CreateStore(HiTrunc, BCHi);
+  Value *StoreHi = CopyDebug(IRB.CreateStore(HiTrunc, BCHi), Inst);
 
   if (!isLegalSize(Width - LoWidth)) {
     // HiTrunc is still illegal, and is redundant with the truncate in the

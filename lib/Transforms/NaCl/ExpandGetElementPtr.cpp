@@ -49,7 +49,7 @@ INITIALIZE_PASS(ExpandGetElementPtr, "expand-getelementptr",
                 false, false)
 
 static Value *CastToPtrSize(Value *Val, Instruction *InsertPt,
-                            const DebugLoc &Debug, Type *PtrType) {
+                            Type *PtrType) {
   unsigned ValSize = Val->getType()->getIntegerBitWidth();
   unsigned PtrSize = PtrType->getIntegerBitWidth();
   if (ValSize == PtrSize)
@@ -61,27 +61,24 @@ static Value *CastToPtrSize(Value *Val, Instruction *InsertPt,
     // GEP indexes must be sign-extended.
     Inst = new SExtInst(Val, PtrType, "gep_sext", InsertPt);
   }
-  Inst->setDebugLoc(Debug);
-  return Inst;
+  return CopyDebug(Inst, InsertPt);
 }
 
 static void FlushOffset(Instruction **Ptr, uint64_t *CurrentOffset,
-                        Instruction *InsertPt, const DebugLoc &Debug,
-                        Type *PtrType) {
+                        Instruction *InsertPt, Type *PtrType) {
   if (*CurrentOffset) {
     *Ptr = BinaryOperator::Create(Instruction::Add, *Ptr,
                                   ConstantInt::get(PtrType, *CurrentOffset),
                                   "gep", InsertPt);
-    (*Ptr)->setDebugLoc(Debug);
+    CopyDebug(*Ptr, InsertPt);
     *CurrentOffset = 0;
   }
 }
 
 static void ExpandGEP(GetElementPtrInst *GEP, DataLayout *DL, Type *PtrType) {
-  const DebugLoc &Debug = GEP->getDebugLoc();
   Instruction *Ptr = new PtrToIntInst(GEP->getPointerOperand(), PtrType,
                                       "gep_int", GEP);
-  Ptr->setDebugLoc(Debug);
+  CopyDebug(Ptr, GEP);
 
   Type *CurrentTy = GEP->getPointerOperand()->getType();
   // We do some limited constant folding ourselves.  An alternative
@@ -105,8 +102,8 @@ static void ExpandGEP(GetElementPtrInst *GEP, DataLayout *DL, Type *PtrType) {
       if (ConstantInt *C = dyn_cast<ConstantInt>(Index)) {
         CurrentOffset += C->getSExtValue() * ElementSize;
       } else {
-        FlushOffset(&Ptr, &CurrentOffset, GEP, Debug, PtrType);
-        Index = CastToPtrSize(Index, GEP, Debug, PtrType);
+        FlushOffset(&Ptr, &CurrentOffset, GEP, PtrType);
+        Index = CastToPtrSize(Index, GEP, PtrType);
         if (ElementSize != 1) {
           Index = CopyDebug(
               BinaryOperator::Create(Instruction::Mul, Index,
@@ -116,15 +113,15 @@ static void ExpandGEP(GetElementPtrInst *GEP, DataLayout *DL, Type *PtrType) {
         }
         Ptr = BinaryOperator::Create(Instruction::Add, Ptr,
                                      Index, "gep", GEP);
-        Ptr->setDebugLoc(Debug);
+        CopyDebug(Ptr, GEP);
       }
     }
   }
-  FlushOffset(&Ptr, &CurrentOffset, GEP, Debug, PtrType);
+  FlushOffset(&Ptr, &CurrentOffset, GEP, PtrType);
 
   assert(CurrentTy == GEP->getType()->getElementType());
   Instruction *Result = new IntToPtrInst(Ptr, GEP->getType(), "", GEP);
-  Result->setDebugLoc(Debug);
+  CopyDebug(Result, GEP);
   Result->takeName(GEP);
   GEP->replaceAllUsesWith(Result);
   GEP->eraseFromParent();

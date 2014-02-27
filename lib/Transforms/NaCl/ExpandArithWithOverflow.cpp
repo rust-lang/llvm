@@ -107,6 +107,7 @@ static bool ExpandOpForIntSize(Module *M, unsigned Bits, bool Mul) {
     Value *ArithResult = BinaryOperator::Create(
         (Mul ? Instruction::Mul : Instruction::Add), VariableArg, ConstantArg,
         Call->getName() + ".arith", Call);
+    CopyDebug(cast<Instruction>(ArithResult), Call);
 
     uint64_t ArgMax;
     if (Mul) {
@@ -117,6 +118,7 @@ static bool ExpandOpForIntSize(Module *M, unsigned Bits, bool Mul) {
     Value *OverflowResult = new ICmpInst(
         Call, CmpInst::ICMP_UGT, VariableArg, ConstantInt::get(IntTy, ArgMax),
         Call->getName() + ".overflow");
+    CopyDebug(cast<Instruction>(OverflowResult), Call);
 
     // Construct the struct result.
     Value *NewStruct = UndefValue::get(Call->getType());

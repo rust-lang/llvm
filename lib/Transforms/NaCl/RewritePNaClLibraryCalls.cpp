@@ -296,15 +296,15 @@ void RewritePNaClLibraryCalls::rewriteSetjmpCall(CallInst *Call) {
   Function *NaClSetjmpFunc = findSetjmpIntrinsic();
   // Cast the jmp_buf argument to the type NaClSetjmpCall expects.
   Type *PtrTy = NaClSetjmpFunc->getFunctionType()->getParamType(0);
-  BitCastInst *JmpBufCast = new BitCastInst(Call->getArgOperand(0), PtrTy,
-                                            "jmp_buf_i8", Call);
-  const DebugLoc &DLoc = Call->getDebugLoc();
-  JmpBufCast->setDebugLoc(DLoc);
+  BitCastInst *JmpBufCast = CopyDebug(new BitCastInst(Call->getArgOperand(0),
+                                                      PtrTy,
+                                                      "jmp_buf_i8",
+                                                      Call),
+                                      Call);
 
   // Emit the updated call.
   Value *Args[] = { JmpBufCast };
-  CallInst *NaClSetjmpCall = CallInst::Create(NaClSetjmpFunc, Args, "", Call);
-  NaClSetjmpCall->setDebugLoc(DLoc);
+  CallInst *NaClSetjmpCall = CopyDebug(CallInst::Create(NaClSetjmpFunc, Args, "", Call), Call);
   NaClSetjmpCall->takeName(Call);
 
   // Replace the original call.
@@ -317,15 +317,15 @@ void RewritePNaClLibraryCalls::rewriteLongjmpCall(CallInst *Call) {
   Function *NaClLongjmpFunc = findLongjmpIntrinsic();
   // Cast the jmp_buf argument to the type NaClLongjmpCall expects.
   Type *PtrTy = NaClLongjmpFunc->getFunctionType()->getParamType(0);
-  BitCastInst *JmpBufCast = new BitCastInst(Call->getArgOperand(0), PtrTy,
-                                            "jmp_buf_i8", Call);
-  const DebugLoc &DLoc = Call->getDebugLoc();
-  JmpBufCast->setDebugLoc(DLoc);
+  BitCastInst *JmpBufCast = CopyDebug(new BitCastInst(Call->getArgOperand(0),
+                                                      PtrTy,
+                                                      "jmp_buf_i8",
+                                                      Call),
+                                      Call);
 
   // Emit the call.
   Value *Args[] = { JmpBufCast, Call->getArgOperand(1) };
-  CallInst *NaClLongjmpCall = CallInst::Create(NaClLongjmpFunc, Args, "", Call);
-  NaClLongjmpCall->setDebugLoc(DLoc);
+  CopyDebug(CallInst::Create(NaClLongjmpFunc, Args, "", Call), Call);
   // No takeName here since longjmp is a void call that does not get assigned to
   // a value.
 
@@ -342,9 +342,11 @@ void RewritePNaClLibraryCalls::rewriteMemcpyCall(CallInst *Call) {
                     Call->getArgOperand(2),
                     ConstantInt::get(Type::getInt32Ty(*Context), 1),
                     ConstantInt::get(Type::getInt1Ty(*Context), 0) };
-  CallInst *MemcpyIntrinsicCall = CallInst::Create(MemcpyIntrinsic,
-                                                   Args, "", Call);
-  MemcpyIntrinsicCall->setDebugLoc(Call->getDebugLoc());
+  CopyDebug(CallInst::Create(MemcpyIntrinsic,
+                             Args,
+                             "",
+                             Call),
+            Call);
 
   // libc memcpy returns the source pointer, but the LLVM intrinsic doesn't; if
   // the return value has actual uses, just replace them with the dest
@@ -361,9 +363,11 @@ void RewritePNaClLibraryCalls::rewriteMemmoveCall(CallInst *Call) {
                     Call->getArgOperand(2),
                     ConstantInt::get(Type::getInt32Ty(*Context), 1),
                     ConstantInt::get(Type::getInt1Ty(*Context), 0) };
-  CallInst *MemmoveIntrinsicCall = CallInst::Create(MemmoveIntrinsic,
-                                                    Args, "", Call);
-  MemmoveIntrinsicCall->setDebugLoc(Call->getDebugLoc());
+  CallInst *MemmoveIntrinsicCall = CopyDebug(CallInst::Create(MemmoveIntrinsic,
+                                                              Args,
+                                                              "",
+                                                              Call),
+                                             Call);
 
   // libc memmove returns the source pointer, but the LLVM intrinsic doesn't; if
   // the return value has actual uses, just replace them with the dest
@@ -376,12 +380,12 @@ void RewritePNaClLibraryCalls::rewriteMemsetCall(CallInst *Call) {
   Function *MemsetIntrinsic = findMemsetIntrinsic();
   // libc memset has 'int c' for the filler byte, but the LLVM intrinsic uses
   // a i8; truncation is required.
-  TruncInst *ByteTrunc = new TruncInst(Call->getArgOperand(1),
-                                       Type::getInt8Ty(*Context),
-                                       "trunc_byte", Call);
-
-  const DebugLoc &DLoc = Call->getDebugLoc();
-  ByteTrunc->setDebugLoc(DLoc);
+  TruncInst *ByteTrunc = CopyDebug(new TruncInst(Call->getArgOperand(1),
+                                                 Type::getInt8Ty(*Context),
+                                                 "trunc_byte",
+                                                 Call),
+                                   Call);
+  
 
   // dest, val, len, align, isvolatile
   Value *Args[] = { Call->getArgOperand(0),
@@ -389,9 +393,11 @@ void RewritePNaClLibraryCalls::rewriteMemsetCall(CallInst *Call) {
                     Call->getArgOperand(2),
                     ConstantInt::get(Type::getInt32Ty(*Context), 1),
                     ConstantInt::get(Type::getInt1Ty(*Context), 0) };
-  CallInst *MemsetIntrinsicCall = CallInst::Create(MemsetIntrinsic,
-                                                   Args, "", Call);
-  MemsetIntrinsicCall->setDebugLoc(DLoc);
+  CopyDebug(CallInst::Create(MemsetIntrinsic,
+                             Args,
+                             "",
+                             Call),
+            Call);
 
   // libc memset returns the source pointer, but the LLVM intrinsic doesn't; if
   // the return value has actual uses, just replace them with the dest

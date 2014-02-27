@@ -276,15 +276,15 @@ private:
       bool HasSideEffect = true;
       CallInst *Asm = CallInst::Create(
           InlineAsm::get(FTy, AsmString, Constraints, HasSideEffect), "", Call);
-      Asm->setDebugLoc(Call->getDebugLoc());
+      CopyDebug(Asm, Call);
       I = new FenceInst(M->getContext(), SequentiallyConsistent, SS, Asm);
       Asm = CallInst::Create(
           InlineAsm::get(FTy, AsmString, Constraints, HasSideEffect), "", I);
-      Asm->setDebugLoc(Call->getDebugLoc());
+      CopyDebug(Asm, Call);
     } break;
     }
     I->setName(Call->getName());
-    I->setDebugLoc(Call->getDebugLoc());
+    CopyDebug(I, Call);
     Call->replaceAllUsesWith(I);
     Call->eraseFromParent();
 
@@ -355,8 +355,13 @@ private:
     std::string AsmString; // Empty.
     std::string Constraints("~{memory}");
     bool HasSideEffect = true;
-    CallInst::Create(InlineAsm::get(
-        FTy, AsmString, Constraints, HasSideEffect), "", Call);
+    CopyDebug(CallInst::Create(InlineAsm::get(FTy,
+                                              AsmString,
+                                              Constraints,
+                                              HasSideEffect),
+                               "",
+                               Call),
+              Call);
 
     BasicBlock *CurrentBB = Call->getParent();
     IRBuilder<> IRB(CurrentBB, Call);
@@ -371,13 +376,13 @@ private:
     // Align the 16-bit pointer to 32-bits, and figure out if the 16-bit
     // operation is to be carried on the top or bottom half of the
     // 32-bit aligned value.
-    Value *IPtr = IRB.CreatePtrToInt(Ptr16, I32, "uintptr");
-    Value *IPtrAlign = IRB.CreateAnd(IPtr, IRB.getInt32(~3u), "aligneduintptr");
-    Value *Aligned32 = IRB.CreateAnd(IPtr, IRB.getInt32(3u), "aligned32");
-    Value *Ptr32 = IRB.CreateIntToPtr(IPtrAlign, I32Ptr, "ptr32");
-    Value *IsAligned32 = IRB.CreateICmpEQ(Aligned32, IRB.getInt32(0),
-                                          "isaligned32");
-    IRB.CreateCondBr(IsAligned32, Aligned32BB, Aligned16BB);
+    Value *IPtr = CopyDebug(IRB.CreatePtrToInt(Ptr16, I32, "uintptr"), Call);
+    Value *IPtrAlign = CopyDebug(IRB.CreateAnd(IPtr, IRB.getInt32(~3u), "aligneduintptr"), Call);
+    Value *Aligned32 = CopyDebug(IRB.CreateAnd(IPtr, IRB.getInt32(3u), "aligned32"), Call);
+    Value *Ptr32 = CopyDebug(IRB.CreateIntToPtr(IPtrAlign, I32Ptr, "ptr32"), Call);
+    Value *IsAligned32 = CopyDebug(IRB.CreateICmpEQ(Aligned32, IRB.getInt32(0),
+                                                    "isaligned32"), Call);
+    CopyDebug(IRB.CreateCondBr(IsAligned32, Aligned32BB, Aligned16BB), Call);
 
     // Create a diamond after the setup. The rest of the basic block
     // that the Call was in is separated into the successor block.
@@ -401,8 +406,9 @@ private:
     {
       IRB.SetInsertPoint(Aligned32BB);
       LoadInst *Loaded = IRB.CreateAlignedLoad(Ptr32, 4, "loaded");
+      CopyDebug(Loaded, Call);
       Loaded->setAtomic(SequentiallyConsistent);
-      Value *TruncVal = IRB.CreateTrunc(Loaded, I16, "truncval");
+      Value *TruncVal = CopyDebug(IRB.CreateTrunc(Loaded, I16, "truncval"), Call);
       Ret32 = TruncVal;
       Value *Res;
       if (IsCmpXChg) {
@@ -423,21 +429,30 @@ private:
         case AtomicRMWInst::Xchg:
           Res = RHS; break;
         }
+
+        CopyDebug(Res, Call);
       }
-      Value *MergeRes = IRB.CreateZExt(Res, I32, "mergeres");
-      Value *MaskedLoaded = IRB.CreateAnd(Loaded, IRB.getInt32(0xFFFF0000u),
-                                          "maskedloaded");
-      Value *FinalRes = IRB.CreateOr(MergeRes, MaskedLoaded, "finalres");
+      Value *MergeRes = CopyDebug(IRB.CreateZExt(Res, I32, "mergeres"), Call);
+      Value *MaskedLoaded = CopyDebug(IRB.CreateAnd(Loaded,
+                                                    IRB.getInt32(0xFFFF0000u),
+                                                    "maskedloaded"),
+                                      Call);
+      Value *FinalRes = CopyDebug(IRB.CreateOr(MergeRes, MaskedLoaded, "finalres"),
+                                  Call);
       Value *Expected = IsCmpXChg ?
-          IRB.CreateOr(MaskedLoaded, IRB.CreateZExt(CmpXChgOldVal, I32, "zext"),
-                       "expected") :
+        CopyDebug(IRB.CreateOr(MaskedLoaded,
+                               CopyDebug(IRB.CreateZExt(CmpXChgOldVal, I32, "zext"), Call),
+                               "expected"), Call) :
           Loaded;
-      Value *OldVal = IRB.CreateAtomicCmpXchg(Ptr32, Expected, FinalRes,
-                                              SequentiallyConsistent);
+      Value *OldVal = CopyDebug(IRB.CreateAtomicCmpXchg(Ptr32,
+                                                        Expected,
+                                                        FinalRes,
+                                                        SequentiallyConsistent),
+                                Call);
       OldVal->setName("oldval");
       // Test that the entire 32-bit value didn't change during the operation.
-      Value *Success = IRB.CreateICmpEQ(OldVal, Loaded, "success");
-      IRB.CreateCondBr(Success, Successor, Aligned32BB);
+      Value *Success = CopyDebug(IRB.CreateICmpEQ(OldVal, Loaded, "success"), Call);
+      CopyDebug(IRB.CreateCondBr(Success, Successor, Aligned32BB), Call);
     }
 
     // Aligned 16 block.
@@ -448,9 +463,14 @@ private:
     {
       IRB.SetInsertPoint(Aligned16BB);
       LoadInst *Loaded = IRB.CreateAlignedLoad(Ptr32, 4, "loaded");
+      CopyDebug(Loaded, Call);
       Loaded->setAtomic(SequentiallyConsistent);
-      Value *ShVal = IRB.CreateTrunc(IRB.CreateLShr(Loaded, 16, "lshr"), I16,
-                                     "shval");
+      Value *ShVal = CopyDebug(IRB.CreateTrunc(IRB.CreateLShr(Loaded,
+                                                              16,
+                                                              "lshr"),
+                                               I16,
+                                               "shval"),
+                               Call);
       Ret16 = ShVal;
       Value *Res;
       if (IsCmpXChg) {
@@ -471,37 +491,43 @@ private:
         case AtomicRMWInst::Xchg:
           Res = RHS; break;
         }
+
+        CopyDebug(Res, Call);
       }
-      Value *MergeRes = IRB.CreateShl(IRB.CreateZExt(Res, I32, "zext"), 16,
-                                      "mergeres");
-      Value *MaskedLoaded = IRB.CreateAnd(Loaded, IRB.getInt32(0xFFFF),
-                                          "maskedloaded");
-      Value *FinalRes = IRB.CreateOr(MergeRes, MaskedLoaded, "finalres");
+      Value *MergeRes = CopyDebug(IRB.CreateShl(IRB.CreateZExt(Res,
+                                                               I32,
+                                                               "zext"),
+                                                16,
+                                                "mergeres"),
+                                  Call);
+      Value *MaskedLoaded = CopyDebug(IRB.CreateAnd(Loaded, IRB.getInt32(0xFFFF),
+                                                    "maskedloaded"), Call);
+      Value *FinalRes = CopyDebug(IRB.CreateOr(MergeRes, MaskedLoaded, "finalres"), Call);
       Value *Expected = IsCmpXChg ?
-          IRB.CreateOr(MaskedLoaded, IRB.CreateShl(
+        CopyDebug(IRB.CreateOr(MaskedLoaded, IRB.CreateShl(
               IRB.CreateZExt(CmpXChgOldVal, I32, "zext"), 16, "shl"),
-                       "expected") :
+                               "expected"), Call) :
           Loaded;
-      Value *OldVal = IRB.CreateAtomicCmpXchg(Ptr32, Expected, FinalRes,
-                                              SequentiallyConsistent);
+      Value *OldVal = CopyDebug(IRB.CreateAtomicCmpXchg(Ptr32, Expected, FinalRes,
+                                                        SequentiallyConsistent), Call);
       OldVal->setName("oldval");
       // Test that the entire 32-bit value didn't change during the operation.
-      Value *Success = IRB.CreateICmpEQ(OldVal, Loaded, "success");
-      IRB.CreateCondBr(Success, Successor, Aligned16BB);
+      Value *Success = CopyDebug(IRB.CreateICmpEQ(OldVal, Loaded, "success"), Call);
+      CopyDebug(IRB.CreateCondBr(Success, Successor, Aligned16BB), Call);
     }
 
     // Merge the value, and remove the original intrinsic Call.
     IRB.SetInsertPoint(Successor->getFirstInsertionPt());
-    PHINode *PHI = IRB.CreatePHI(I16, 2);
+    PHINode *PHI = CopyDebug(IRB.CreatePHI(I16, 2), Call);
     PHI->addIncoming(Ret32, Aligned32BB);
     PHI->addIncoming(Ret16, Aligned16BB);
     Call->replaceAllUsesWith(PHI);
     Call->eraseFromParent();
 
     // Finish everything with another compiler fence.
-    CallInst::Create(InlineAsm::get(
+    CopyDebug(CallInst::Create(InlineAsm::get(
         FTy, AsmString, Constraints, HasSideEffect), "",
-                     Successor->getFirstInsertionPt());
+                               Successor->getFirstInsertionPt()), Call);
   }
   // ===========================================================================
   // End hacks.

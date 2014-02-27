@@ -204,16 +204,16 @@ Value *FunctionConverter::convert(Value *Val, bool BypassPlaceholder) {
 Value *FunctionConverter::convertBackToPtr(Value *Val, Instruction *InsertPt) {
   Type *NewTy =
     convertType(Val->getType()->getPointerElementType())->getPointerTo();
-  return new IntToPtrInst(convert(Val), NewTy, "", InsertPt);
+  return CopyDebug(new IntToPtrInst(convert(Val), NewTy, "", InsertPt), InsertPt);
 }
 
 Value *FunctionConverter::convertFunctionPtr(Value *Callee,
                                              Instruction *InsertPt) {
   FunctionType *FuncType = cast<FunctionType>(
       Callee->getType()->getPointerElementType());
-  return new IntToPtrInst(convert(Callee),
-                          convertFuncType(FuncType)->getPointerTo(),
-                          "", InsertPt);
+  return CopyDebug(new IntToPtrInst(convert(Callee),
+                                    convertFuncType(FuncType)->getPointerTo(),
+                                    "", InsertPt), InsertPt);
 }
 
 static bool ShouldLeaveAlone(Value *V) {
@@ -230,13 +230,14 @@ void FunctionConverter::convertInPlace(Instruction *Inst) {
     Value *Arg = Inst->getOperand(I);
     if (Arg->getType()->isPointerTy() && !ShouldLeaveAlone(Arg)) {
       Value *Conv = convert(Arg);
-      Inst->setOperand(I, new IntToPtrInst(Conv, Arg->getType(), "", Inst));
+      Inst->setOperand(I, CopyDebug(new IntToPtrInst(Conv, Arg->getType(), "", Inst), Inst));
     }
   }
   // Convert result.
   if (Inst->getType()->isPointerTy()) {
     Instruction *Cast = new PtrToIntInst(
         Inst, convertType(Inst->getType()), Inst->getName() + ".asint");
+    CopyDebug(Cast, Inst);
     Cast->insertAfter(Inst);
     recordConverted(Inst, Cast);
   }
@@ -472,9 +473,12 @@ static void ConvertInstruction(DataLayout *DL, Type *IntPtrType,
     if (ConstantInt *C = dyn_cast<ConstantInt>(Alloca->getArraySize())) {
       MulSize = ConstantExpr::getMul(ElementSize, C);
     } else {
-      MulSize = BinaryOperator::Create(
-          Instruction::Mul, ElementSize, Alloca->getArraySize(),
-          Alloca->getName() + ".alloca_mul", Alloca);
+      MulSize = CopyDebug(BinaryOperator::Create(Instruction::Mul,
+                                                 ElementSize,
+                                                 Alloca->getArraySize(),
+                                                 Alloca->getName() + ".alloca_mul",
+                                                 Alloca),
+                          Inst);
     }
     unsigned Alignment = Alloca->getAlignment();
     if (Alignment == 0)
@@ -483,8 +487,10 @@ static void ConvertInstruction(DataLayout *DL, Type *IntPtrType,
                                           MulSize, Alignment, "", Inst),
                            Inst);
     Tmp->takeName(Alloca);
-    Value *Alloca2 = new PtrToIntInst(Tmp, IntPtrType,
-                                      Tmp->getName() + ".asint", Inst);
+    Value *Alloca2 = CopyDebug(new PtrToIntInst(Tmp, IntPtrType,
+                                                Tmp->getName() + ".asint",
+                                                Inst),
+                               Inst);
     FC->recordConvertedAndErase(Alloca, Alloca2);
   } else if (// Handle these instructions as a convenience to allow
              // the pass to be used in more situations, even though we
@@ -514,7 +520,7 @@ static void SimplifyCasts(Instruction *Inst, Type *IntPtrType) {
       assert(Cast2->getType() == IntPtrType);
       Value *V = Cast2->getPointerOperand();
       if (V->getType() != Cast1->getType())
-        V = new BitCastInst(V, Cast1->getType(), V->getName() + ".bc", Cast1);
+        V = CopyDebug(new BitCastInst(V, Cast1->getType(), V->getName() + ".bc", Cast1), Inst);
       Cast1->replaceAllUsesWith(V);
       if (Cast1->use_empty())
         Cast1->eraseFromParent();

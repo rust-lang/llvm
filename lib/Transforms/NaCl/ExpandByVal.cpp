@@ -131,8 +131,9 @@ static bool ExpandCall(DataLayout *DL, InstType *Call) {
           std::max(Alignment, DL->getABITypeAlignment(ArgType));
 
       // Make a copy of the byval argument.
-      Instruction *CopyBuf = new AllocaInst(ArgType, 0, AllocAlignment,
-                                            ArgPtr->getName() + ".byval_copy");
+      Instruction *CopyBuf = CopyDebug(new AllocaInst(ArgType, 0, AllocAlignment,
+                                                      ArgPtr->getName() + ".byval_copy"),
+                                       Call);
       Function *Func = Call->getParent()->getParent();
       Func->getEntryBlock().getInstList().push_front(CopyBuf);
       IRBuilder<> Builder(Call);
@@ -142,9 +143,8 @@ static bool ExpandCall(DataLayout *DL, InstType *Call) {
       // the alignment attribute specifies "the alignment of the stack
       // slot to form and the known alignment of the pointer specified
       // to the call site".
-      Instruction *MemCpy = Builder.CreateMemCpy(CopyBuf, ArgPtr, ArgSize,
-                                                 Alignment);
-      MemCpy->setDebugLoc(Call->getDebugLoc());
+      CopyDebug(Builder.CreateMemCpy(CopyBuf, ArgPtr, ArgSize,
+                                     Alignment), Call);
 
       Call->setArgOperand(ArgIdx, CopyBuf);
 

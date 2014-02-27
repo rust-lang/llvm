@@ -98,8 +98,7 @@ bool PromoteI1Ops::runOnBasicBlock(BasicBlock &BB) {
                 Store->getPointerOperand()->getName() + ".i8ptr", Store),
             Store);
         Value *Val = promoteValue(Store->getValueOperand(), false, Store);
-        StoreInst *NewStore = new StoreInst(Val, Ptr, Store);
-        CopyDebug(NewStore, Store);
+        StoreInst *NewStore = CopyDebug(new StoreInst(Val, Ptr, Store), Store);
         CopyLoadOrStoreAttrs(NewStore, Store);
         Store->eraseFromParent();
       }

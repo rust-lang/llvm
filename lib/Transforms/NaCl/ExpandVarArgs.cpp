@@ -154,7 +154,7 @@ static void LifetimeDecl(Intrinsic::ID id, Value *Ptr, Value *Size,
   SmallVector<Value *, 2> Args;
   Args.push_back(Size);
   Args.push_back(Ptr);
-  CallInst::Create(Func, Args, "", InsertPt);
+  CopyDebug(CallInst::Create(Func, Args, "", InsertPt), InsertPt);
 }
 
 // CopyCall() uses argument overloading so that it can be used by the

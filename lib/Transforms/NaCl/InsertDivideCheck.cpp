@@ -38,12 +38,12 @@ namespace {
   };
 }
 
-static BasicBlock *CreateTrapBlock(Function &F, DebugLoc dl) {
+static BasicBlock *CreateTrapBlock(Function &F, Instruction* Dbg) {
   BasicBlock *TrapBlock = BasicBlock::Create(F.getContext(), "divrem.by.zero",
                                              &F);
   Value *TrapFn = Intrinsic::getDeclaration(F.getParent(), Intrinsic::trap);
-  CallInst::Create(TrapFn, "", TrapBlock)->setDebugLoc(dl);
-  (new UnreachableInst(F.getContext(), TrapBlock))->setDebugLoc(dl);
+  CopyDebug(CallInst::Create(TrapFn, "", TrapBlock), Dbg);
+  CopyDebug(new UnreachableInst(F.getContext(), TrapBlock), Dbg);
   return TrapBlock;
 }
 
@@ -69,19 +69,18 @@ bool InsertDivideCheck::runOnFunction(Function &F) {
       Value *Denominator = DivInst->getOperand(1);
       if (!Denominator->getType()->isIntegerTy())
         continue;
-      DebugLoc dl = DivInst->getDebugLoc();
       if (ConstantInt *DenomConst = dyn_cast<ConstantInt>(Denominator)) {
         // Divides by constants do not need a denominator test.
         if (DenomConst->isZero()) {
           // For explicit divides by zero, insert a trap before DIV/REM
           Value *TrapFn = Intrinsic::getDeclaration(F.getParent(),
                                                     Intrinsic::trap);
-          CallInst::Create(TrapFn, "", DivInst)->setDebugLoc(dl);
+          CopyDebug(CallInst::Create(TrapFn, "", DivInst), DivInst);
         }
         continue;
       }
       // Create a trap block.
-      BasicBlock *TrapBlock = CreateTrapBlock(F, dl);
+      BasicBlock *TrapBlock = CreateTrapBlock(F, DivInst);
       // Move instructions in BB from DivInst to BB's end to a new block.
       BasicBlock *Successor = BB->splitBasicBlock(BI, "guarded.divrem");
       // Remove the unconditional branch inserted by splitBasicBlock.
@@ -91,10 +90,10 @@ bool InsertDivideCheck::runOnFunction(Function &F) {
       GuardedDivs.insert(DivInst);
       // Compare the denominator with zero.
       Value *Zero = ConstantInt::get(Denominator->getType(), 0);
-      Value *DenomIsZero = new ICmpInst(*BB, ICmpInst::ICMP_EQ, Denominator,
-                                        Zero, "");
+      Value *DenomIsZero = CopyDebug(new ICmpInst(*BB, ICmpInst::ICMP_EQ, Denominator,
+                                                  Zero, ""), DivInst);
       // Put in a condbranch to the trap block.
-      BranchInst::Create(TrapBlock, Successor, DenomIsZero, BB);
+      CopyDebug(BranchInst::Create(TrapBlock, Successor, DenomIsZero, BB), DivInst);
       // BI is invalidated when we split.  Stop the BasicBlock iterator.
       break;
     }
