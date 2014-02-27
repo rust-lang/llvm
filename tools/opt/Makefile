@@ -9,7 +9,7 @@
 
 LEVEL := ../..
 TOOLNAME := opt
-LINK_COMPONENTS := bitreader bitwriter asmparser irreader instrumentation scalaropts objcarcopts ipo vectorize nacltransforms naclanalysis all-targets
+LINK_COMPONENTS := bitreader bitwriter asmparser irreader instrumentation scalaropts objcarcopts ipo vectorize nacltransforms naclanalysis naclbitwriter naclbitreader all-targets
 
 # Support plugins.
 NO_DEAD_STRIP := 1
