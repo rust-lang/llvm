@@ -70,14 +70,6 @@ static cl::opt<unsigned>
 TimeCompilations("time-compilations", cl::Hidden, cl::init(1u),
                  cl::value_desc("N"),
                  cl::desc("Repeat compilation N times for timing"));
-static cl::opt<bool>
-PNaClABIVerify("pnaclabi-verify",
-  cl::desc("Verify PNaCl bitcode ABI before translating"),
-  cl::init(false));
-static cl::opt<bool>
-PNaClABIVerifyFatalErrors("pnaclabi-verify-fatal-errors",
-  cl::desc("PNaCl ABI verification errors are fatal"),
-  cl::init(false));
 
 // Determine optimization level.
 static cl::opt<char>
@@ -220,20 +212,6 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-// @LOCALMOD-BEGIN
-static void CheckABIVerifyErrors(PNaClABIErrorReporter &Reporter,
-                                 const Twine &Name) {
-  if (PNaClABIVerify && Reporter.getErrorCount() > 0) {
-    errs() << (PNaClABIVerifyFatalErrors ? "ERROR: " : "WARNING: ");
-    errs() << Name << " is not valid PNaCl bitcode:\n";
-    Reporter.printErrors(errs());
-    if (PNaClABIVerifyFatalErrors)
-      exit(1);
-  }
-  Reporter.reset();
-}
-// @LOCALMOD-END
-
 static int compileModule(char **argv, LLVMContext &Context) {
   // Load the module to be compiled...
   SMDiagnostic Err;
@@ -244,8 +222,6 @@ static int compileModule(char **argv, LLVMContext &Context) {
   bool SkipModule = MCPU == "help" ||
                     (!MAttrs.empty() && MAttrs.front() == "help");
 
-  PNaClABIErrorReporter ABIErrorReporter; // @LOCALMOD
-
   // If user just wants to list available options, skip module loading
   if (!SkipModule) {
     M.reset(ParseIRFile(InputFilename, Err, Context, InputFileFormat));
@@ -255,30 +231,10 @@ static int compileModule(char **argv, LLVMContext &Context) {
       return 1;
     }
 
-    if (PNaClABIVerify) {
-      // Verify the module (but not the functions yet)
-      ModulePass *VerifyPass = createPNaClABIVerifyModulePass(&ABIErrorReporter);
-      VerifyPass->runOnModule(*mod);
-      CheckABIVerifyErrors(ABIErrorReporter, "Module");
-    }
-
     // If we are supposed to override the target triple, do so now.
     if (!TargetTriple.empty())
       mod->setTargetTriple(Triple::normalize(TargetTriple));
     TheTriple = Triple(mod->getTargetTriple());
-
-    // @LOCALMOD-BEGIN
-    // Add declarations for external functions required by PNaCl. The
-    // ResolvePNaClIntrinsics function pass running during streaming
-    // depends on these declarations being in the module.
-    if (TheTriple.isOSNaCl()) {
-      // TODO(eliben): pnacl-llc presumably won't need the isOSNaCl
-      // test.
-      OwningPtr<ModulePass> AddPNaClExternalDeclsPass(
-          createAddPNaClExternalDeclsPass());
-      AddPNaClExternalDeclsPass->runOnModule(*mod);
-    }
-    // @LOCALMOD-END
   } else {
     TheTriple = Triple(Triple::normalize(TargetTriple));
   }
@@ -362,19 +318,6 @@ static int compileModule(char **argv, LLVMContext &Context) {
   // Build up all of the passes that we want to do to the module.
   PassManager PM;
 
-  // Add the ABI verifier pass before the analysis and code emission passes.
-  FunctionPass *FunctionVerifyPass = NULL;
-  if (PNaClABIVerify) {
-    FunctionVerifyPass = createPNaClABIVerifyFunctionsPass(&ABIErrorReporter);
-    PM->add(FunctionVerifyPass);
-  }
-
-  if (TheTriple.isOSNaCl()) {
-    // Add the intrinsic resolution pass. It assumes ABI-conformant code.
-    PM->add(createResolvePNaClIntrinsicsPass());
-  }
-
-
   // Add an appropriate TargetLibraryInfo pass for the module's triple.
   TargetLibraryInfo *TLI = new TargetLibraryInfo(TheTriple);
   if (DisableSimplifyLibCalls)
@@ -398,8 +341,6 @@ static int compileModule(char **argv, LLVMContext &Context) {
       Target.setMCRelaxAll(true);
   }
 
-
-        CheckABIVerifyErrors(ABIErrorReporter, "Function " + I->getName());
   {
     formatted_raw_ostream FOS(Out->os());
 
@@ -435,7 +376,6 @@ static int compileModule(char **argv, LLVMContext &Context) {
     cl::PrintOptionValues();
 
     PM.run(*mod);
-        CheckABIVerifyErrors(ABIErrorReporter, "Function " + I->getName());
   }
 
   // Declare success.
