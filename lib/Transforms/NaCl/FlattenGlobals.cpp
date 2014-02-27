@@ -205,7 +205,7 @@ void FlattenedConstant::putAtDest(DataLayout *DL, Constant *Val,
         NewVal = ConstantExpr::getAdd(
             NewVal, ConstantInt::get(IntPtrType, Offset, /* isSigned= */ true));
       }
-      Reloc NewRel = { Dest - Buf, NewVal };
+      Reloc NewRel = { static_cast<unsigned int>(Dest - Buf), NewVal };
       Relocs.push_back(NewRel);
     } else {
       memcpy(Dest, &Offset, ValSize);
