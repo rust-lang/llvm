@@ -56,7 +56,7 @@ ModulePass *createRewritePNaClLibraryCallsPass();
 ModulePass *createStripAttributesPass();
 ModulePass *createStripMetadataPass();
 
-void PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM, const bool building_lib = false);
+void PNaClABISimplifyAddPreOptPasses(PassManagerBase &PM, const bool BuildingLib = false);
 void PNaClABISimplifyAddPostOptPasses(PassManagerBase &PM);
 
 Instruction *PhiSafeInsertPt(Use *U);
