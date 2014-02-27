@@ -35,8 +35,6 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/IntegersSubset.h"
-#include "llvm/Support/IntegersSubsetMapping.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/NaCl.h"
 
@@ -584,6 +582,7 @@ static void convertInstruction(Instruction *Inst, ConversionState &State) {
     State.recordConverted(Phi, NewPhi);
   } else if (SwitchInst *Switch = dyn_cast<SwitchInst>(Inst)) {
     Value *Condition = getClearConverted(Switch->getCondition(), Switch, State);
+    Type* ConditionType = Condition->getType();
     SwitchInst *NewInst = SwitchInst::Create(
         Condition,
         Switch->getDefaultDest(),
@@ -596,17 +595,16 @@ static void convertInstruction(Instruction *Inst, ConversionState &State) {
       // Build a new case from the ranges that map to the successor BB. Each
       // range consists of a high and low value which are typed, so the ranges
       // must be rebuilt and a new case constructed from them.
-      IntegersSubset CaseRanges = I.getCaseValueEx();
-      IntegersSubsetToBB CaseBuilder;
-      for (unsigned RI = 0, RE = CaseRanges.getNumItems(); RI < RE; ++RI) {
-        CaseBuilder.add(
-            IntItem::fromConstantInt(cast<ConstantInt>(convertConstant(
-                CaseRanges.getItem(RI).getLow().toConstantInt()))),
-            IntItem::fromConstantInt(cast<ConstantInt>(convertConstant(
-                CaseRanges.getItem(RI).getHigh().toConstantInt()))));
+      if(shouldConvert(I.getCaseValue())) {
+	Type* PromotedType = getPromotedType(I.getCaseValue()->getType());
+	const APInt Value = I.getCaseValue()->getValue().sext(ConditionType->getPrimitiveSizeInBits());
+	Constant* C = ConstantInt::get(PromotedType, Value);
+	NewInst->addCase(cast<ConstantInt>(C),
+			 I.getCaseSuccessor());
       }
-      IntegersSubset Case = CaseBuilder.getCase();
-      NewInst->addCase(Case, I.getCaseSuccessor());
+      else {
+	NewInst->addCase(I.getCaseValue(), I.getCaseSuccessor());
+      }
     }
     Switch->eraseFromParent();
   } else {

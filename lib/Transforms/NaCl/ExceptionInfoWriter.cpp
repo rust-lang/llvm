@@ -155,6 +155,7 @@
 
 #include "ExceptionInfoWriter.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/Constants.h"
 
 using namespace llvm;
 

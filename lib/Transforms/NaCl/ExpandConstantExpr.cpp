@@ -25,6 +25,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/NaCl.h"
+#include "llvm/IR/Constants.h"
 
 using namespace llvm;
 
