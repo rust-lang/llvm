@@ -63,13 +63,13 @@
 ; CHECK-NEXT: @bytes = internal global [4 x i8] c"abcd"
 
 declare i32 @bar(i32)
-; CHECK: declare i32 @bar(i32)
+; CHECK-LABEL: declare i32 @bar(i32)
 
 define void @func() {
   ret void
 }
 
-; CHECK:      define void @func() {
+; CHECK-LABEL:      define void @func() {
 ; CHECK-NEXT:   ret void
 ; CHECK-NEXT: }
 
@@ -81,7 +81,7 @@ define void @AllocCastSimple() {
   ret void
 }
 
-; CHECK:      define void @AllocCastSimple() {
+; CHECK-LABEL:      define void @AllocCastSimple() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint i8* %1 to i32
 ; CHECK-NEXT:   %3 = bitcast [4 x i8]* @bytes to i32*
@@ -97,7 +97,7 @@ define void @AllocCastSimpleReversed() {
   ret void
 }
 
-; CHECK:      define void @AllocCastSimpleReversed() {
+; CHECK-LABEL:      define void @AllocCastSimpleReversed() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint i8* %1 to i32
 ; CHECK-NEXT:   %3 = bitcast [4 x i8]* @bytes to i32*
@@ -111,7 +111,7 @@ define void @AllocCastDelete() {
   ret void
 }
 
-; CHECK:      define void @AllocCastDelete() {
+; CHECK-LABEL:      define void @AllocCastDelete() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   ret void
@@ -126,7 +126,7 @@ define void @AllocCastOpt() {
   ret void
 }
 
-; CHECK:      define void @AllocCastOpt() {
+; CHECK-LABEL:      define void @AllocCastOpt() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint i8* %1 to i32
 ; CHECK-NEXT:   %3 = bitcast [4 x i8]* @bytes to i32*
@@ -144,7 +144,7 @@ define void @AllocBitcast(i32) {
   ret void
 }
 
-; CHECK:      define void @AllocBitcast(i32) {
+; CHECK-LABEL:      define void @AllocBitcast(i32) {
 ; CHECK-NEXT:   %2 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %3 = add i32 %0, 1
 ; CHECK-NEXT:   %4 = ptrtoint i8* %2 to i32
@@ -161,7 +161,7 @@ define void @StoreGlobal() {
   ret void
 }
 
-; CHECK:      define void @StoreGlobal() {
+; CHECK-LABEL:      define void @StoreGlobal() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint [4 x i8]* @bytes to i32
 ; CHECK-NEXT:   %3 = bitcast i8* %1 to i32*
@@ -177,7 +177,7 @@ define void @StoreGlobalCastsReversed() {
   ret void
 }
 
-; CHECK:      define void @StoreGlobalCastsReversed() {
+; CHECK-LABEL:      define void @StoreGlobalCastsReversed() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint [4 x i8]* @bytes to i32
 ; CHECK-NEXT:   %3 = bitcast i8* %1 to i32*
@@ -193,7 +193,7 @@ define i32 @StoreGlobalCastPtr2Int() {
   ret i32 0
 }
 
-; CHECK:      define i32 @StoreGlobalCastPtr2Int() {
+; CHECK-LABEL:      define i32 @StoreGlobalCastPtr2Int() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint [4 x i8]* @bytes to i32
 ; CHECK-NEXT:   %3 = bitcast i8* %1 to i32*
@@ -211,7 +211,7 @@ define void @CastAddAlloca() {
   ret void
 }
 
-; CHECK:      define void @CastAddAlloca() {
+; CHECK-LABEL:      define void @CastAddAlloca() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = add i32 1, 2
 ; CHECK-NEXT:   %3 = ptrtoint i8* %1 to i32
@@ -230,7 +230,7 @@ define void @CastAddGlobal() {
   ret void
 }
 
-; CHECK:      define void @CastAddGlobal() {
+; CHECK-LABEL:      define void @CastAddGlobal() {
 ; CHECK-NEXT:   %1 = add i32 1, 2
 ; CHECK-NEXT:   %2 = ptrtoint [4 x i8]* @bytes to i32
 ; CHECK-NEXT:   %3 = add i32 %2, 2
@@ -257,7 +257,7 @@ define void @CastBinop() {
   ret void
 }
 
-; CHECK:      define void @CastBinop() {
+; CHECK-LABEL:      define void @CastBinop() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint i8* %1 to i32
 ; CHECK-NEXT:   %3 = ptrtoint [4 x i8]* @bytes to i32
@@ -283,7 +283,7 @@ define void @TestSavedPtrToInt() {
   ret void
 }
 
-; CHECK:      define void @TestSavedPtrToInt() {
+; CHECK-LABEL:      define void @TestSavedPtrToInt() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = ptrtoint i8* %1 to i32
 ; CHECK-NEXT:   %3 = add i32 %2, 0
@@ -303,7 +303,7 @@ define void @CastSelect() {
   ret void
 }
 
-; CHECK:      define void @CastSelect() {
+; CHECK-LABEL:      define void @CastSelect() {
 ; CHECK-NEXT:   %1 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %2 = select i1 true, i32 1, i32 2
 ; CHECK-NEXT:   %3 = ptrtoint i8* %1 to i32
@@ -338,21 +338,21 @@ merge:                                            ; preds = %false, %true
   ret void
 }
 
-; CHECK:      define void @PhiBackwardRefs(i1) {
+; CHECK-LABEL:      define void @PhiBackwardRefs(i1) {
 ; CHECK-NEXT:   %2 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %3 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   br i1 %0, label %true, label %false
-; CHECK:      true:                                             ; preds = %1
+; CHECK-LABEL:      true:                                             ; preds = %1
 ; CHECK-NEXT:   %4 = bitcast i8* %2 to i32*
 ; CHECK-NEXT:   %5 = load i32* %4
 ; CHECK-NEXT:   %6 = ptrtoint i8* %3 to i32
 ; CHECK-NEXT:   br label %merge
-; CHECK:      false:                                            ; preds = %1
+; CHECK-LABEL:      false:                                            ; preds = %1
 ; CHECK-NEXT:   %7 = bitcast i8* %2 to i32*
 ; CHECK-NEXT:   %8 = load i32* %7
 ; CHECK-NEXT:   %9 = ptrtoint i8* %3 to i32
 ; CHECK-NEXT:   br label %merge
-; CHECK:      merge:                                            ; preds = %false, %true
+; CHECK-LABEL:      merge:                                            ; preds = %false, %true
 ; CHECK-NEXT:   %10 = phi i32 [ %6, %true ], [ %9, %false ]
 ; CHECK-NEXT:   %11 = phi i32 [ %5, %true ], [ %8, %false ]
 ; CHECK-NEXT:   ret void
@@ -384,21 +384,21 @@ start:                                            ; preds = %1
   br i1 %0, label %true, label %false
 }
 
-; CHECK:      define void @PhiForwardRefs(i1) {
+; CHECK-LABEL:      define void @PhiForwardRefs(i1) {
 ; CHECK-NEXT:   br label %start
-; CHECK:      merge:                                            ; preds = %false, %true
+; CHECK-LABEL:      merge:                                            ; preds = %false, %true
 ; CHECK-NEXT:   %2 = phi i32 [ %11, %true ], [ %11, %false ]
 ; CHECK-NEXT:   %3 = phi i32 [ %5, %true ], [ %7, %false ]
 ; CHECK-NEXT:   ret void
-; CHECK:      true:                                             ; preds = %start
+; CHECK-LABEL:      true:                                             ; preds = %start
 ; CHECK-NEXT:   %4 = inttoptr i32 %9 to i32*
 ; CHECK-NEXT:   %5 = load i32* %4
 ; CHECK-NEXT:   br label %merge
-; CHECK:      false:                                            ; preds = %start
+; CHECK-LABEL:      false:                                            ; preds = %start
 ; CHECK-NEXT:   %6 = inttoptr i32 %9 to i32*
 ; CHECK-NEXT:   %7 = load i32* %6
 ; CHECK-NEXT:   br label %merge
-; CHECK:      start:                                            ; preds = %1
+; CHECK-LABEL:      start:                                            ; preds = %1
 ; CHECK-NEXT:   %8 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %9 = ptrtoint i8* %8 to i32
 ; CHECK-NEXT:   %10 = alloca i8, i32 4, align 8
@@ -430,22 +430,22 @@ merge:                                            ; preds = %false, %true
   ret void
 }
 
-; CHECK:      define void @PhiMergeCast(i1) {
+; CHECK-LABEL:      define void @PhiMergeCast(i1) {
 ; CHECK-NEXT:   %2 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   %3 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   br i1 %0, label %true, label %false
-; CHECK:      true:                                             ; preds = %1
+; CHECK-LABEL:      true:                                             ; preds = %1
 ; CHECK-NEXT:   %4 = bitcast i8* %2 to i32*
 ; CHECK-NEXT:   %5 = load i32* %4
 ; CHECK-NEXT:   %6 = ptrtoint i8* %3 to i32
 ; CHECK-NEXT:   %7 = add i32 %5, %6
 ; CHECK-NEXT:   br label %merge
-; CHECK:      false:                                            ; preds = %1
+; CHECK-LABEL:      false:                                            ; preds = %1
 ; CHECK-NEXT:   %8 = bitcast i8* %2 to i32*
 ; CHECK-NEXT:   %9 = load i32* %8
 ; CHECK-NEXT:   %10 = ptrtoint i8* %3 to i32
 ; CHECK-NEXT:   br label %merge
-; CHECK:      merge:                                            ; preds = %false, %true
+; CHECK-LABEL:      merge:                                            ; preds = %false, %true
 ; CHECK-NEXT:   %11 = phi i32 [ %6, %true ], [ %10, %false ]
 ; CHECK-NEXT:   %12 = phi i32 [ %5, %true ], [ %9, %false ]
 ; CHECK-NEXT:   ret void
@@ -490,32 +490,32 @@ b4:                                               ; preds = %Split2
   ret void
 }
 
-; CHECK:      define void @LongReachingCasts(i1) {
+; CHECK-LABEL:      define void @LongReachingCasts(i1) {
 ; CHECK-NEXT:   %2 = alloca i8, i32 4, align 8
 ; CHECK-NEXT:   br i1 %0, label %Split1, label %Split2
-; CHECK:      Split1:                                           ; preds = %1
+; CHECK-LABEL:      Split1:                                           ; preds = %1
 ; CHECK-NEXT:   br i1 %0, label %b1, label %b2
-; CHECK:      Split2:                                           ; preds = %1
+; CHECK-LABEL:      Split2:                                           ; preds = %1
 ; CHECK-NEXT:   br i1 %0, label %b3, label %b4
-; CHECK:      b1:                                               ; preds = %Split1
+; CHECK-LABEL:      b1:                                               ; preds = %Split1
 ; CHECK-NEXT:   %3 = ptrtoint i8* %2 to i32
 ; CHECK-NEXT:   %4 = bitcast [4 x i8]* @bytes to i32*
 ; CHECK-NEXT:   store i32 %3, i32* %4, align 1
 ; CHECK-NEXT:   store i32 %3, i32* %4, align 1
 ; CHECK-NEXT:   ret void
-; CHECK:      b2:                                               ; preds = %Split1
+; CHECK-LABEL:      b2:                                               ; preds = %Split1
 ; CHECK-NEXT:   %5 = ptrtoint i8* %2 to i32
 ; CHECK-NEXT:   %6 = bitcast [4 x i8]* @bytes to i32*
 ; CHECK-NEXT:   store i32 %5, i32* %6, align 1
 ; CHECK-NEXT:   store i32 %5, i32* %6, align 1
 ; CHECK-NEXT:   ret void
-; CHECK:      b3:                                               ; preds = %Split2
+; CHECK-LABEL:      b3:                                               ; preds = %Split2
 ; CHECK-NEXT:   %7 = ptrtoint i8* %2 to i32
 ; CHECK-NEXT:   %8 = bitcast [4 x i8]* @bytes to i32*
 ; CHECK-NEXT:   store i32 %7, i32* %8, align 1
 ; CHECK-NEXT:   store i32 %7, i32* %8, align 1
 ; CHECK-NEXT:   ret void
-; CHECK:      b4:                                               ; preds = %Split2
+; CHECK-LABEL:      b4:                                               ; preds = %Split2
 ; CHECK-NEXT:   %9 = ptrtoint i8* %2 to i32
 ; CHECK-NEXT:   %10 = bitcast [4 x i8]* @bytes to i32*
 ; CHECK-NEXT:   store i32 %9, i32* %10, align 1
@@ -546,7 +546,7 @@ end:                                              ; preds = %l3, %l2, %l1, %2
   ret void
 }
 
-; CHECK:      define void @SwitchVariable(i32) {
+; CHECK-LABEL:      define void @SwitchVariable(i32) {
 ; CHECK-NEXT:   switch i32 %0, label %l1 [
 ; CHECK-NEXT:     i32 1, label %l2
 ; CHECK-NEXT:     i32 2, label %l2
@@ -555,13 +555,13 @@ end:                                              ; preds = %l3, %l2, %l1, %2
 ; CHECK-NEXT:   ]
 ; CHECK-NEXT:                                                   ; No predecessors!
 ; CHECK-NEXT:   br label %end
-; CHECK:      l1:                                               ; preds = %1
+; CHECK-LABEL:      l1:                                               ; preds = %1
 ; CHECK-NEXT:   br label %end
-; CHECK:      l2:                                               ; preds = %1, %1
+; CHECK-LABEL:      l2:                                               ; preds = %1, %1
 ; CHECK-NEXT:   br label %end
-; CHECK:      l3:                                               ; preds = %1, %1
+; CHECK-LABEL:      l3:                                               ; preds = %1, %1
 ; CHECK-NEXT:   br label %end
-; CHECK:      end:                                              ; preds = %l3, %l2, %l1, %2
+; CHECK-LABEL:      end:                                              ; preds = %l3, %l2, %l1, %2
 ; CHECK-NEXT:   ret void
 ; CHECK-NEXT: }
 

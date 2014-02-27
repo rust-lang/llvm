@@ -107,14 +107,10 @@ static const char *linkageName(GlobalValue::LinkageTypes LT) {
     case GlobalValue::InternalLinkage:      return "internal ";
     case GlobalValue::LinkOnceAnyLinkage:   return "linkonce ";
     case GlobalValue::LinkOnceODRLinkage:   return "linkonce_odr ";
-    case GlobalValue::LinkOnceODRAutoHideLinkage:
-      return "linkonce_odr_auto_hide ";
     case GlobalValue::WeakAnyLinkage:       return "weak ";
     case GlobalValue::WeakODRLinkage:       return "weak_odr ";
     case GlobalValue::CommonLinkage:        return "common ";
     case GlobalValue::AppendingLinkage:     return "appending ";
-    case GlobalValue::DLLImportLinkage:     return "dllimport ";
-    case GlobalValue::DLLExportLinkage:     return "dllexport ";
     case GlobalValue::ExternalWeakLinkage:  return "extern_weak ";
     case GlobalValue::AvailableExternallyLinkage:
       return "available_externally ";

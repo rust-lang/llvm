@@ -160,6 +160,9 @@ public:
   const RecordVector &GetValues() const {
     return Values;
   }
+  RecordVector &GetValues() {
+    return Values;
+  }
 
   /// Returns the number of bits in this record.
   unsigned GetNumBits() const {

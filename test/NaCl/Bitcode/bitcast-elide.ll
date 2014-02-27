@@ -20,7 +20,7 @@ define void @SimpleLoad() {
   ret void
 }
 
-; TD2:      define void @SimpleLoad() {
+; TD2-LABEL:      define void @SimpleLoad() {
 ; TD2-NEXT:   %1 = bitcast [4 x i8]* @bytes to i32*
 ; TD2-NEXT:   %2 = load i32* %1, align 4
 ; TD2-NEXT:   ret void
@@ -42,7 +42,7 @@ define void @SimpleLoadAlloca() {
   ret void
 }
 
-; TD2:      define void @SimpleLoadAlloca() {
+; TD2-LABEL:      define void @SimpleLoadAlloca() {
 ; TD2-NEXT:   %1 = alloca i8, i32 4, align 4
 ; TD2-NEXT:   %2 = bitcast i8* %1 to i32*
 ; TD2-NEXT:   %3 = load i32* %2, align 4
@@ -68,7 +68,7 @@ define i32 @TwoLoads(i32 %i) {
   ret i32 %5
 }
 
-; TD2:      define i32 @TwoLoads(i32 %i) {
+; TD2-LABEL:      define i32 @TwoLoads(i32 %i) {
 ; TD2-NEXT:   %1 = bitcast [4 x i8]* @bytes to i32*
 ; TD2-NEXT:   %2 = load i32* %1, align 4
 ; TD2-NEXT:   %3 = load i32* %1, align 4
@@ -96,7 +96,7 @@ define i32 @TwoLoadOptOneBlock(i32 %i) {
   ret i32 %4
 }
 
-; TD2:      define i32 @TwoLoadOptOneBlock(i32 %i) {
+; TD2-LABEL:      define i32 @TwoLoadOptOneBlock(i32 %i) {
 ; TD2-NEXT:   %1 = bitcast [4 x i8]* @bytes to i32*
 ; TD2-NEXT:   %2 = load i32* %1, align 4
 ; TD2-NEXT:   %3 = load i32* %1, align 4
@@ -130,13 +130,13 @@ BB:
   ret i32 %4
 }
 
-; TD2:      define i32 @TwoLoadOptTwoBlocks(i32 %i) {
+; TD2-LABEL:      define i32 @TwoLoadOptTwoBlocks(i32 %i) {
 ; TD2-NEXT:   %1 = bitcast [4 x i8]* @bytes to i32*
 ; TD2-NEXT:   %2 = load i32* %1, align 4
 ; TD2-NEXT:   %3 = load i32* %1, align 4
 ; TD2-NEXT:   %4 = add i32 %2, %3
 ; TD2-NEXT:   br label %BB
-; TD2:      BB:
+; TD2-LABEL:      BB:
 ; TD2-NEXT:   %5 = bitcast [4 x i8]* @bytes to i32*
 ; TD2-NEXT:   %6 = load i32* %5, align 4
 ; TD2-NEXT:   %7 = load i32* %5, align 4
@@ -165,7 +165,7 @@ define void @SimpleStore(i32 %i) {
   ret void
 }
 
-; TD2:      define void @SimpleStore(i32 %i) {
+; TD2-LABEL:      define void @SimpleStore(i32 %i) {
 ; TD2-NEXT:   %1 = bitcast [4 x i8]* @bytes to i32*
 ; TD2-NEXT:   store i32 %i, i32* %1, align 4
 ; TD2-NEXT:   ret void

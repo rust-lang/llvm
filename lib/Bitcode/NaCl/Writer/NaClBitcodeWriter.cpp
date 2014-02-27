@@ -314,14 +314,17 @@ static void WriteTypeTable(const NaClValueEnumerator &VE,
 }
 
 static unsigned getEncodedLinkage(const GlobalValue *GV) {
+  if(GV->hasDLLImportStorageClass())
+    return 5;
+  else if(GV->hasDLLExportStorageClass())
+    return 6;
+
   switch (GV->getLinkage()) {
   case GlobalValue::ExternalLinkage:                 return 0;
   case GlobalValue::WeakAnyLinkage:                  return 1;
   case GlobalValue::AppendingLinkage:                return 2;
   case GlobalValue::InternalLinkage:                 return 3;
   case GlobalValue::LinkOnceAnyLinkage:              return 4;
-  case GlobalValue::DLLImportLinkage:                return 5;
-  case GlobalValue::DLLExportLinkage:                return 6;
   case GlobalValue::ExternalWeakLinkage:             return 7;
   case GlobalValue::CommonLinkage:                   return 8;
   case GlobalValue::PrivateLinkage:                  return 9;
@@ -330,7 +333,6 @@ static unsigned getEncodedLinkage(const GlobalValue *GV) {
   case GlobalValue::AvailableExternallyLinkage:      return 12;
   case GlobalValue::LinkerPrivateLinkage:            return 13;
   case GlobalValue::LinkerPrivateWeakLinkage:        return 14;
-  case GlobalValue::LinkOnceODRAutoHideLinkage:      return 15;
   }
   llvm_unreachable("Invalid linkage");
 }

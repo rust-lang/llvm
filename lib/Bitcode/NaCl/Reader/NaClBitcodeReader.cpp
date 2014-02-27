@@ -57,25 +57,28 @@ static bool ConvertToString(ArrayRef<uint64_t> Record, unsigned Idx,
   return false;
 }
 
-static GlobalValue::LinkageTypes GetDecodedLinkage(unsigned Val) {
+static void SetDecodedLinkage(GlobalValue* Global, unsigned Val) {
   switch (Val) {
   default: // Map unknown/new linkages to external
-  case 0:  return GlobalValue::ExternalLinkage;
-  case 1:  return GlobalValue::WeakAnyLinkage;
-  case 2:  return GlobalValue::AppendingLinkage;
-  case 3:  return GlobalValue::InternalLinkage;
-  case 4:  return GlobalValue::LinkOnceAnyLinkage;
-  case 5:  return GlobalValue::DLLImportLinkage;
-  case 6:  return GlobalValue::DLLExportLinkage;
-  case 7:  return GlobalValue::ExternalWeakLinkage;
-  case 8:  return GlobalValue::CommonLinkage;
-  case 9:  return GlobalValue::PrivateLinkage;
-  case 10: return GlobalValue::WeakODRLinkage;
-  case 11: return GlobalValue::LinkOnceODRLinkage;
-  case 12: return GlobalValue::AvailableExternallyLinkage;
-  case 13: return GlobalValue::LinkerPrivateLinkage;
-  case 14: return GlobalValue::LinkerPrivateWeakLinkage;
-  case 15: return GlobalValue::LinkOnceODRAutoHideLinkage;
+  case 0:  Global->setLinkage(GlobalValue::ExternalLinkage); break;
+  case 1:  Global->setLinkage(GlobalValue::WeakAnyLinkage); break;
+  case 2:  Global->setLinkage(GlobalValue::AppendingLinkage); break;
+  case 3:  Global->setLinkage(GlobalValue::InternalLinkage); break;
+  case 4:  Global->setLinkage(GlobalValue::LinkOnceAnyLinkage); break;
+  case 5:  Global->setDLLStorageClass(GlobalValue::DLLImportStorageClass); break;
+  case 6:  Global->setDLLStorageClass(GlobalValue::DLLExportStorageClass); break;
+  case 7:  Global->setLinkage(GlobalValue::ExternalWeakLinkage); break;
+  case 8:  Global->setLinkage(GlobalValue::CommonLinkage); break;
+  case 9:  Global->setLinkage(GlobalValue::PrivateLinkage); break;
+  case 10: Global->setLinkage(GlobalValue::WeakODRLinkage); break;
+  case 11: Global->setLinkage(GlobalValue::LinkOnceODRLinkage); break;
+  case 12: Global->setLinkage(GlobalValue::AvailableExternallyLinkage); break;
+  case 13: Global->setLinkage(GlobalValue::LinkerPrivateLinkage); break;
+  case 14: Global->setLinkage(GlobalValue::LinkerPrivateWeakLinkage); break;
+  case 15:
+    // Whoops. just use LinkOnceODRLinkage for now
+    Global->setLinkage(GlobalValue::LinkOnceODRLinkage);
+    break;
   }
 }
 
@@ -878,7 +881,7 @@ bool NaClBitcodeReader::ParseModule(bool Resume) {
 
       Func->setCallingConv(GetDecodedCallingConv(Record[1]));
       bool isProto = Record[2];
-      Func->setLinkage(GetDecodedLinkage(Record[3]));
+      SetDecodedLinkage(Func, Record[3]);
       ValueList.push_back(Func);
 
       // If this is a function with a body, remember the prototype we are
@@ -1244,12 +1247,17 @@ bool NaClBitcodeReader::ParseFunctionBody(Function *F) {
 
       unsigned CurIdx = 4;
       for (unsigned i = 0; i != NumCases; ++i) {
-        IntegersSubsetToBB CaseBuilder;
         unsigned NumItems = Record[CurIdx++];
+
+        std::vector<std::pair<APInt, APInt> > CaseRanges;
+        CaseRanges.reserve(NumItems);
+
         for (unsigned ci = 0; ci != NumItems; ++ci) {
           bool isSingleNumber = Record[CurIdx++];
 
           APInt Low;
+          APInt High;
+
           unsigned ActiveWords = 1;
           if (ValueBitWidth > 64)
             ActiveWords = Record[CurIdx++];
@@ -1261,19 +1269,24 @@ bool NaClBitcodeReader::ParseFunctionBody(Function *F) {
             ActiveWords = 1;
             if (ValueBitWidth > 64)
               ActiveWords = Record[CurIdx++];
-            APInt High =
-                ReadWideAPInt(makeArrayRef(&Record[CurIdx], ActiveWords),
-                              ValueBitWidth);
 
-            CaseBuilder.add(IntItem::fromType(OpTy, Low),
-                            IntItem::fromType(OpTy, High));
+            High = ReadWideAPInt(makeArrayRef(&Record[CurIdx], ActiveWords),
+                                 ValueBitWidth);
+
             CurIdx += ActiveWords;
           } else
-            CaseBuilder.add(IntItem::fromType(OpTy, Low));
+            High = Low;
+
+          CaseRanges.push_back(std::make_pair(Low, High));
         }
         BasicBlock *DestBB = getBasicBlock(Record[CurIdx++]);
-        IntegersSubset Case = CaseBuilder.getCase();
-        SI->addCase(Case, DestBB);
+        /// LLVM doesn't support case ranges anymore, so we have to emulate:
+        for(size_t j = 0, j_end = CaseRanges.size(); j < j_end; ++j) {
+          for(APInt k(CaseRanges[j].first),
+                    k_end(CaseRanges[j].second + 1); k != k_end; ++k) {
+            SI->addCase(cast<ConstantInt>(ConstantInt::get(OpTy, k)), DestBB);
+          }
+        }
       }
       I = SI;
       break;
@@ -1517,24 +1530,25 @@ bool NaClBitcodeReader::isMaterializable(const GlobalValue *GV) const {
   return false;
 }
 
-bool NaClBitcodeReader::Materialize(GlobalValue *GV, std::string *ErrInfo) {
+error_code NaClBitcodeReader::Materialize(GlobalValue *GV) {
   Function *F = dyn_cast<Function>(GV);
   // If it's not a function or is already material, ignore the request.
-  if (!F || !F->isMaterializable()) return false;
+  if (!F || !F->isMaterializable()) 
+    return error_code::success();
 
   DenseMap<Function*, uint64_t>::iterator DFII = DeferredFunctionInfo.find(F);
   assert(DFII != DeferredFunctionInfo.end() && "Deferred function not found!");
   // If its position is recorded as 0, its body is somewhere in the stream
   // but we haven't seen it yet.
   if (DFII->second == 0)
-    if (LazyStreamer && FindFunctionInStream(F, DFII)) return true;
+    if (LazyStreamer && FindFunctionInStream(F, DFII)) 
+      return make_error_code(errc::no_stream_resources);
 
   // Move the bit stream to the saved position of the deferred function body.
   Stream.JumpToBit(DFII->second);
 
   if (ParseFunctionBody(F)) {
-    if (ErrInfo) *ErrInfo = ErrorString;
-    return true;
+    return make_error_code(errc::protocol_error);
   }
 
   // Upgrade any old intrinsic calls in the function.
@@ -1549,7 +1563,7 @@ bool NaClBitcodeReader::Materialize(GlobalValue *GV, std::string *ErrInfo) {
     }
   }
 
-  return false;
+  return error_code::success();
 }
 
 bool NaClBitcodeReader::isDematerializable(const GlobalValue *GV) const {
@@ -1572,7 +1586,7 @@ void NaClBitcodeReader::Dematerialize(GlobalValue *GV) {
 }
 
 
-bool NaClBitcodeReader::MaterializeModule(Module *M, std::string *ErrInfo) {
+error_code NaClBitcodeReader::MaterializeModule(Module *M) {
   assert(M == TheModule &&
          "Can only Materialize the Module this NaClBitcodeReader is attached to.");
   // Iterate over the module, deserializing any functions that are still on
@@ -1580,8 +1594,8 @@ bool NaClBitcodeReader::MaterializeModule(Module *M, std::string *ErrInfo) {
   for (Module::iterator F = TheModule->begin(), E = TheModule->end();
        F != E; ++F)
     if (F->isMaterializable() &&
-        Materialize(F, ErrInfo))
-      return true;
+        Materialize(F))
+      return make_error_code(errc::protocol_error);
 
   // At this point, if there are any function bodies, the current bit is
   // pointing to the END_BLOCK record after them. Now make sure the rest
@@ -1608,7 +1622,7 @@ bool NaClBitcodeReader::MaterializeModule(Module *M, std::string *ErrInfo) {
   }
   std::vector<std::pair<Function*, Function*> >().swap(UpgradedIntrinsics);
 
-  return false;
+  return error_code::success();
 }
 
 bool NaClBitcodeReader::InitStream() {
@@ -1708,8 +1722,11 @@ Module *llvm::NaClParseBitcodeFile(MemoryBuffer *Buffer, LLVMContext& Context,
   static_cast<NaClBitcodeReader*>(M->getMaterializer())->setBufferOwned(false);
 
   // Read in the entire module, and destroy the NaClBitcodeReader.
-  if (M->MaterializeAllPermanently(ErrMsg)) {
+  error_code result = M->materializeAll();
+  if (result) {
     delete M;
+    if(ErrMsg)
+      *ErrMsg = result.message();
     return 0;
   }
 
