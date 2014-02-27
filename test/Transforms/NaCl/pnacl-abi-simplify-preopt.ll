@@ -1,8 +1,10 @@
-; RUN: opt %s -pnacl-abi-simplify-preopt -S | FileCheck %s
+; RUN: opt < %s -pnacl-abi-simplify-preopt -S | FileCheck %s
 
 ; "-pnacl-abi-simplify-preopt" runs various passes which are tested
 ; thoroughly in other *.ll files.  This file is a smoke test to check
 ; that "-pnacl-abi-simplify-preopt" runs what it's supposed to run.
+
+target datalayout = "p:32:32:32"
 
 declare void @ext_func()
 

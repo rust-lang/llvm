@@ -3,6 +3,8 @@
 ; Checks that PNaCl ABI pre-opt simplification correctly internalizes
 ; symbols except _start.
 
+target datalayout = "p:32:32:32"
+
 define void @main() {
 ; CHECK: define internal void @main
   ret void

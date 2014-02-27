@@ -22,7 +22,7 @@
 define i64* @get_tvar1() {
   ret i64* @tvar1
 }
-; CHECK: define i64* @get_tvar1()
+; CHECK-LABEL: define i64* @get_tvar1()
 ; CHECK: %tls_raw = call i8* @llvm.nacl.read.tp()
 ; CHECK: %tls_struct = bitcast i8* %tls_raw to %tls_struct*
 ; CHECK: %field = getelementptr %tls_struct* %tls_struct, i32 -1, i32 0, i32 0
@@ -33,7 +33,7 @@ define i32* @get_tvar2() {
   ret i32* @tvar2
 }
 ; Much the same as for get_tvar1.
-; CHECK: define i32* @get_tvar2()
+; CHECK-LABEL: define i32* @get_tvar2()
 ; CHECK: %field = getelementptr %tls_struct* %tls_struct, i32 -1, i32 0, i32 1
 
 
@@ -46,19 +46,19 @@ define i32* @get_tvar2() {
 define i8* @get_tls_template_start() {
   ret i8* @__tls_template_start
 }
-; CHECK: define i8* @get_tls_template_start()
+; CHECK-LABEL: define i8* @get_tls_template_start()
 ; CHECK: ret i8* bitcast (%tls_init_template* @__tls_template_start to i8*)
 
 define i8* @get_tls_template_tdata_end() {
   ret i8* @__tls_template_tdata_end
 }
-; CHECK: define i8* @get_tls_template_tdata_end()
+; CHECK-LABEL: define i8* @get_tls_template_tdata_end()
 ; CHECK: ret i8* bitcast (%tls_init_template* getelementptr inbounds (%tls_init_template* @__tls_template_start, i32 1) to i8*)
 
 define i8* @get_tls_template_end() {
   ret i8* @__tls_template_end
 }
-; CHECK: define i8* @get_tls_template_end()
+; CHECK-LABEL: define i8* @get_tls_template_end()
 ; CHECK: ret i8* bitcast (%tls_struct* getelementptr (%tls_struct* bitcast (%tls_init_template* @__tls_template_start to %tls_struct*), i32 1) to i8*)
 
 
@@ -72,7 +72,7 @@ define i32 @test_get_tp_tls_offset(i32 %tls_size) {
   ret i32 %offset
 }
 ; Uses of the intrinsic are replaced with uses of a regular function.
-; CHECK: define i32 @test_get_tp_tls_offset
+; CHECK-LABEL: define i32 @test_get_tp_tls_offset
 ; CHECK: call i32 @nacl_tp_tls_offset
 ; NO_TLS-NOT: llvm.nacl.tp.tls.offset
 
@@ -81,6 +81,6 @@ define i32 @test_get_tp_tdb_offset(i32 %tdb_size) {
   ret i32 %offset
 }
 ; Uses of the intrinsic are replaced with uses of a regular function.
-; CHECK: define i32 @test_get_tp_tdb_offset
+; CHECK-LABEL: define i32 @test_get_tp_tdb_offset
 ; CHECK: call i32 @nacl_tp_tdb_offset
 ; NO_TLS-NOT: llvm.nacl.tp.tdb.offset

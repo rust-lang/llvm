@@ -1,5 +1,5 @@
-; RUN: opt %s -expand-struct-regs -S | FileCheck %s
-; RUN: opt %s -expand-struct-regs -S | FileCheck %s -check-prefix=CLEANUP
+; RUN: opt < %s -expand-struct-regs -S | FileCheck %s
+; RUN: opt < %s -expand-struct-regs -S | FileCheck %s -check-prefix=CLEANUP
 
 ; These two instructions should not appear in the output:
 ; CLEANUP-NOT: extractvalue
@@ -16,7 +16,7 @@ define void @struct_load(%struct* %p, i8* %out0, i32* %out1) {
   store i32 %field1, i32* %out1
   ret void
 }
-; CHECK: define void @struct_load
+; CHECK-LABEL: define void @struct_load
 ; CHECK-NEXT: %val.index{{.*}} = getelementptr %struct* %p, i32 0, i32 0
 ; CHECK-NEXT: %val.field{{.*}} = load i8* %val.index{{.*}}, align 1
 ; CHECK-NEXT: %val.index{{.*}} = getelementptr %struct* %p, i32 0, i32 1
@@ -30,7 +30,7 @@ define void @struct_store(%struct* %in_ptr, %struct* %out_ptr) {
   store %struct %val, %struct* %out_ptr
   ret void
 }
-; CHECK: define void @struct_store
+; CHECK-LABEL: define void @struct_store
 ; CHECK-NEXT: %val.index{{.*}} = getelementptr %struct* %in_ptr, i32 0, i32 0
 ; CHECK-NEXT: %val.field{{.*}} = load i8* %val.index{{.*}}, align 1
 ; CHECK-NEXT: %val.index{{.*}} = getelementptr %struct* %in_ptr, i32 0, i32 1
@@ -49,7 +49,7 @@ bb:
   store %struct %val, %struct* %out_ptr
   ret void
 }
-; CHECK: define void @across_basic_block
+; CHECK-LABEL: define void @across_basic_block
 ; CHECK: load
 ; CHECK: load
 ; CHECK: bb:
@@ -61,7 +61,7 @@ define void @const_struct_store(%struct* %ptr) {
   store %struct { i8 99, i32 1234 }, %struct* %ptr
   ret void
 }
-; CHECK: define void @const_struct_store
+; CHECK-LABEL: define void @const_struct_store
 ; CHECK: store i8 99
 ; CHECK: store i32 1234
 
@@ -74,7 +74,7 @@ bb:
   %phi = phi %struct [ %val, %entry ]
   ret void
 }
-; CHECK: bb:
+; CHECK-LABEL: bb:
 ; CHECK-NEXT: %phi.index{{.*}} = phi i8 [ %val.field{{.*}}, %entry ]
 ; CHECK-NEXT: %phi.index{{.*}} = phi i32 [ %val.field{{.*}}, %entry ]
 
@@ -87,7 +87,7 @@ bb:
   %phi = phi %struct [ %val, %entry ], [ %val, %entry ]
   ret void
 }
-; CHECK: bb:
+; CHECK-LABEL: bb:
 ; CHECK-NEXT: %phi.index{{.*}} = phi i8 [ %val.field{{.*}}, %entry ], [ %val.field{{.*}}, %entry ]
 ; CHECK-NEXT: %phi.index{{.*}} = phi i32 [ %val.field{{.*}}, %entry ], [ %val.field{{.*}}, %entry ]
 
@@ -98,7 +98,7 @@ define void @struct_select_inst(i1 %cond, %struct* %ptr1, %struct* %ptr2) {
   %select = select i1 %cond, %struct %val1, %struct %val2
   ret void
 }
-; CHECK: define void @struct_select_inst
+; CHECK-LABEL: define void @struct_select_inst
 ; CHECK: %select.index{{.*}} = select i1 %cond, i8 %val1.field{{.*}}, i8 %val2.field{{.*}}
 ; CHECK-NEXT: %select.index{{.*}} = select i1 %cond, i32 %val1.field{{.*}}, i32 %val2.field{{.*}}
 
@@ -112,7 +112,7 @@ define void @insert_and_extract(i8* %out0, i32* %out1) {
   store i32 %field1, i32* %out1
   ret void
 }
-; CHECK: define void @insert_and_extract(i8* %out0, i32* %out1) {
+; CHECK-LABEL: define void @insert_and_extract(i8* %out0, i32* %out1) {
 ; CHECK-NEXT: store i8 100, i8* %out0
 ; CHECK-NEXT: store i32 200, i32* %out1
 ; CHECK-NEXT: ret void
@@ -122,5 +122,5 @@ define i32 @extract_from_constant() {
   %ev = extractvalue %struct { i8 99, i32 888 }, 1
   ret i32 %ev
 }
-; CHECK: define i32 @extract_from_constant() {
+; CHECK-LABEL: define i32 @extract_from_constant() {
 ; CHECK-NEXT: ret i32 888

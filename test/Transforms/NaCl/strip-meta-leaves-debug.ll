@@ -2,10 +2,10 @@
 ; RUN: opt -S -strip-metadata -strip-debug %s | FileCheck %s --check-prefix=NODEBUG
 
 define i32 @foo(i32 %c) {
-; CHECK: @foo
+; CHECK-LABEL: @foo
 ; CHECK-NEXT: call void @llvm.dbg{{.*}}, !dbg
 ; CHECK-NEXT: ret{{.*}}, !dbg
-; NODEBUG: @foo
+; NODEBUG-LABEL: @foo
 ; NODEBUG-NOT: !dbg
   tail call void @llvm.dbg.value(metadata !{i32 %c}, i64 0, metadata !9), !dbg !10
   ret i32 %c, !dbg !11
@@ -23,7 +23,7 @@ declare void @llvm.dbg.value(metadata, i64, metadata) #1
 !llvm.dbg.cu = !{!0}
 
 ; CHECK-NOT: llvm.module.flags
-!llvm.module.flags = !{ !12}
+!llvm.module.flags = !{ !12, !13 }
 
 ; CHECK: !0 =
 !0 = metadata !{i32 786449, i32 0, i32 12, metadata !"test.c", metadata !"/tmp", metadata !"clang version 3.3 (trunk 176732) (llvm/trunk 176733)", i1 true, i1 true, metadata !"", i32 0, metadata !1, metadata !1, metadata !2, metadata !1, metadata !""} ; [ DW_TAG_compile_unit ] [/tmp/test.c] [DW_LANG_C99]
@@ -44,3 +44,4 @@ declare void @llvm.dbg.value(metadata, i64, metadata) #1
      metadata !{
         metadata !{ metadata !"-lz" },
         metadata !{ metadata !"-framework", metadata !"Cocoa" } } }
+!13 = metadata !{i32 1, metadata !"Debug Info Version", i32 1}

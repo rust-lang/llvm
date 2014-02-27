@@ -7,7 +7,7 @@
 define i8* @constantexpr_bitcast() {
   ret i8* bitcast (i32* @global_var1 to i8*)
 }
-; CHECK: @constantexpr_bitcast
+; CHECK-LABEL: @constantexpr_bitcast
 ; CHECK: %expanded = bitcast i32* @global_var1 to i8*
 ; CHECK: ret i8* %expanded
 
@@ -16,7 +16,7 @@ define i32 @constantexpr_nested() {
   ret i32 add (i32 ptrtoint (i32* @global_var1 to i32),
                i32 ptrtoint (i32* @global_var2 to i32))
 }
-; CHECK: @constantexpr_nested
+; CHECK-LABEL: @constantexpr_nested
 ; CHECK: %expanded1 = ptrtoint i32* @global_var1 to i32
 ; CHECK: %expanded2 = ptrtoint i32* @global_var2 to i32
 ; CHECK: %expanded = add i32 %expanded1, %expanded2
@@ -27,7 +27,7 @@ define i32 @constantexpr_nested2() {
   ret i32 mul (i32 add (i32 ptrtoint (i32* @global_var1 to i32),
                         i32 ptrtoint (i32* @global_var2 to i32)), i32 2)
 }
-; CHECK: @constantexpr_nested2
+; CHECK-LABEL: @constantexpr_nested2
 ; CHECK: %expanded2 = ptrtoint i32* @global_var1 to i32
 ; CHECK: %expanded3 = ptrtoint i32* @global_var2 to i32
 ; CHECK: %expanded1 = add i32 %expanded2, %expanded3
@@ -42,7 +42,7 @@ label:
   %result = phi i32 [ ptrtoint (i32* @global_var1 to i32), %entry ]
   ret i32 %result
 }
-; CHECK: @constantexpr_phi
+; CHECK-LABEL: @constantexpr_phi
 ; CHECK: entry:
 ; CHECK: %expanded = ptrtoint i32* @global_var1 to i32
 ; CHECK: br label %label
@@ -65,7 +65,7 @@ exit:
                     [ ptrtoint (i32* @global_var1 to i32), %iffalse ]
   ret i32 %result
 }
-; CHECK: @constantexpr_phi_twice
+; CHECK-LABEL: @constantexpr_phi_twice
 ; CHECK: iftrue:
 ; CHECK: %expanded = ptrtoint i32* @global_var1 to i32
 ; CHECK: iffalse:
@@ -81,7 +81,7 @@ done:
                     [ ptrtoint (i32* @global_var1 to i32), %entry ]
   ret i32 %result
 }
-; CHECK: @constantexpr_phi_multiple_entry
+; CHECK-LABEL: @constantexpr_phi_multiple_entry
 ; CHECK: entry:
 ; CHECK: %expanded = ptrtoint i32* @global_var1 to i32
 ; CHECK: br i1 %arg, label %done, label %done
@@ -105,5 +105,5 @@ onerror:
 }
 ; landingpad can only accept a ConstantExpr, so this should remain
 ; unmodified.
-; CHECK: @test_landingpad
+; CHECK-LABEL: @test_landingpad
 ; CHECK: personality i8* bitcast (void ()* @personality_func to i8*)

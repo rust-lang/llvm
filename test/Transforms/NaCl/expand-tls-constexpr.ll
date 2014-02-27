@@ -6,7 +6,7 @@
 define i32 @test_converting_ptrtoint() {
   ret i32 ptrtoint (i32* @tvar to i32)
 }
-; CHECK: define i32 @test_converting_ptrtoint()
+; CHECK-LABEL: define i32 @test_converting_ptrtoint()
 ; CHECK: %expanded = ptrtoint i32* @tvar to i32
 ; CHECK: ret i32 %expanded
 
@@ -14,7 +14,7 @@ define i32 @test_converting_ptrtoint() {
 define i32 @test_converting_add() {
   ret i32 add (i32 ptrtoint (i32* @tvar to i32), i32 4)
 }
-; CHECK: define i32 @test_converting_add()
+; CHECK-LABEL: define i32 @test_converting_add()
 ; CHECK: %expanded1 = ptrtoint i32* @tvar to i32
 ; CHECK: %expanded = add i32 %expanded1, 4
 ; CHECK: ret i32 %expanded
@@ -24,7 +24,7 @@ define i32 @test_converting_multiple_operands() {
   ret i32 add (i32 ptrtoint (i32* @tvar to i32),
                i32 ptrtoint (i32* @tvar to i32))
 }
-; CHECK: define i32 @test_converting_multiple_operands()
+; CHECK-LABEL: define i32 @test_converting_multiple_operands()
 ; CHECK: %expanded1 = ptrtoint i32* @tvar to i32
 ; CHECK: %expanded = add i32 %expanded1, %expanded1
 ; CHECK: ret i32 %expanded
@@ -34,7 +34,7 @@ define i32 @test_allocating_new_var_name(i32 %expanded) {
   %result = add i32 %expanded, ptrtoint (i32* @tvar to i32)
   ret i32 %result
 }
-; CHECK: define i32 @test_allocating_new_var_name(i32 %expanded)
+; CHECK-LABEL: define i32 @test_allocating_new_var_name(i32 %expanded)
 ; CHECK: %expanded1 = ptrtoint i32* @tvar to i32
 ; CHECK: %result = add i32 %expanded, %expanded1
 ; CHECK: ret i32 %result
@@ -43,7 +43,7 @@ define i32 @test_allocating_new_var_name(i32 %expanded) {
 define i8* @test_converting_bitcast() {
   ret i8* bitcast (i32* @tvar to i8*)
 }
-; CHECK: define i8* @test_converting_bitcast()
+; CHECK-LABEL: define i8* @test_converting_bitcast()
 ; CHECK: %expanded = bitcast i32* @tvar to i8*
 ; CHECK: ret i8* %expanded
 
@@ -52,7 +52,7 @@ define i32* @test_converting_getelementptr() {
   ; Use an index >1 to ensure that "inbounds" is not added automatically.
   ret i32* getelementptr (i32* @tvar, i32 2)
 }
-; CHECK: define i32* @test_converting_getelementptr()
+; CHECK-LABEL: define i32* @test_converting_getelementptr()
 ; CHECK: %expanded = getelementptr i32* @tvar, i32 2
 ; CHECK: ret i32* %expanded
 
@@ -62,7 +62,7 @@ define i32* @test_converting_getelementptr() {
 define i32* @test_converting_getelementptr_copy() {
   ret i32* getelementptr (i32* @tvar, i32 2)
 }
-; CHECK: define i32* @test_converting_getelementptr_copy()
+; CHECK-LABEL: define i32* @test_converting_getelementptr_copy()
 ; CHECK: %expanded = getelementptr i32* @tvar, i32 2
 ; CHECK: ret i32* %expanded
 
@@ -70,7 +70,7 @@ define i32* @test_converting_getelementptr_copy() {
 define i32* @test_converting_getelementptr_inbounds() {
   ret i32* getelementptr inbounds (i32* @tvar, i32 2)
 }
-; CHECK: define i32* @test_converting_getelementptr_inbounds()
+; CHECK-LABEL: define i32* @test_converting_getelementptr_inbounds()
 ; CHECK: %expanded = getelementptr inbounds i32* @tvar, i32 2
 ; CHECK: ret i32* %expanded
 
@@ -88,11 +88,11 @@ return:
 }
 ; The converted ConstantExprs get pushed back into the PHI node's
 ; incoming block, which might be suboptimal but works in all cases.
-; CHECK: define i32* @test_converting_phi(i1 %cmp)
-; CHECK: entry:
+; CHECK-LABEL: define i32* @test_converting_phi(i1 %cmp)
+; CHECK-LABEL: entry:
 ; CHECK: %expanded = getelementptr inbounds i32* @tvar, i32 1
-; CHECK: else:
-; CHECK: return:
+; CHECK-LABEL: else:
+; CHECK-LABEL: return:
 ; CHECK: %result = phi i32* [ %expanded, %entry ], [ null, %else ]
 
 
@@ -109,10 +109,10 @@ return:
   %result = phi i32* [ getelementptr (i32* @tvar, i32 1), %entry ], [ null, %else ]
   ret i32* %result
 }
-; CHECK: define i32* @test_converting_phi_with_indirectbr(i8* %addr)
-; CHECK: entry:
+; CHECK-LABEL: define i32* @test_converting_phi_with_indirectbr(i8* %addr)
+; CHECK-LABEL: entry:
 ; CHECK: %expanded = getelementptr inbounds i32* @tvar, i32 1
-; CHECK: return:
+; CHECK-LABEL: return:
 ; CHECK: %result = phi i32* [ %expanded, %entry ], [ null, %else ]
 
 
@@ -131,22 +131,10 @@ exit:
                     [ ptrtoint (i32* @tvar to i32), %iffalse ]
   ret i32 %result
 }
-; CHECK: define i32 @test_converting_phi_twice(i1 %arg)
-; CHECK: iftrue:
+; CHECK-LABEL: define i32 @test_converting_phi_twice(i1 %arg)
+; CHECK-LABEL: iftrue:
 ; CHECK: %expanded{{.*}} = ptrtoint i32* @tvar to i32
-; CHECK: iffalse:
+; CHECK-LABEL: iffalse:
 ; CHECK: %expanded{{.*}} = ptrtoint i32* @tvar to i32
-; CHECK: exit:
+; CHECK-LABEL: exit:
 ; CHECK: %result = phi i32 [ %expanded1, %iftrue ], [ %expanded, %iffalse ]
-
-
-define i32 @test_converting_phi_multiple_entry(i1 %arg) {
-entry:
-  br i1 %arg, label %done, label %done
-done:
-  %result = phi i32 [ ptrtoint (i32* @tvar to i32), %entry ],
-                    [ ptrtoint (i32* @tvar to i32), %entry ]
-  ret i32 %result
-}
-; CHECK: define i32 @test_converting_phi_multiple_entry(i1 %arg)
-; CHECK: %result = phi i32 [ %expanded, %entry ], [ %expanded, %entry ]
