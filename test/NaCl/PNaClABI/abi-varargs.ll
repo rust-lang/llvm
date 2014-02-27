@@ -1,4 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
+; XFAIL: *
 
 define void @varargs_func(i32 %arg, ...) {
   ret void

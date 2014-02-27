@@ -1,4 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
+; XFAIL: *
 
 @aliased_var = internal global [1 x i8] c"x"
 ; CHECK-NOT: disallowed

@@ -1,4 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
+; XFAIL: *
 
 ; Make sure that external symbols are properly rejected or accepted
 

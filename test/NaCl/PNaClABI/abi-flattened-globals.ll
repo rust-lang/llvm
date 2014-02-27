@@ -1,5 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
-
+; XFAIL: *
 
 ; Allowed cases
 

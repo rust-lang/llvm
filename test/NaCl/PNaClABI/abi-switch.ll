@@ -1,4 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
+; XFAIL: *
 
 @var = internal global [4 x i8] c"xxxx"
 

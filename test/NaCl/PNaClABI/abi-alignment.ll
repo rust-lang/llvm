@@ -1,4 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
+; XFAIL: *
 
 ; Test the "align" attributes that are allowed on load and store
 ; instructions.

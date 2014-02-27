@@ -1,4 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
+; XFAIL: *
 
 ; This test checks that the "addrspace" pointer attribute is rejected
 ; by the PNaCl ABI verifier.  The only allowed address space value is

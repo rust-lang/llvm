@@ -1,4 +1,5 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
+; XFAIL: *
 
 ; Disallow the visibility attributes set by
 ; __attribute__((visibility("hidden"))) and

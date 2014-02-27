@@ -1,6 +1,6 @@
 ; RUN: pnacl-abicheck < %s | FileCheck %s
 ; RUN: pnacl-abicheck -pnaclabi-allow-debug-metadata < %s | FileCheck %s --check-prefix=DEBUG
-
+; XFAIL: *
 
 ; Metadata is not part of the PNaCl's stable ABI, so normally the ABI
 ; checker rejects metadata entirely.  However, for debugging support,
