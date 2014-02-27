@@ -21,10 +21,8 @@
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/RegionPass.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
-#include "llvm/Analysis/Verifier.h"
-#include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Bitcode/ReaderWriter.h"
-#include "llvm/Bitcode/NaCl/NaClReaderWriter.h" // @LOCALMOD
+#include "llvm/Bitcode/NaCl/NaClBitcodeWriterPass.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/DebugInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -762,8 +760,13 @@ int main(int argc, char **argv) {
   if (!NoOutput && !AnalyzeOnly) {
     if (OutputAssembly)
       Passes.add(createPrintModulePass(Out->os()));
-    else
+    else if(OutputFileFormat == LLVMFormat)
       Passes.add(createBitcodeWriterPass(Out->os()));
+    else if(OutputFileFormat == PNaClFormat)
+      Passes.add(createNaClBitcodeWriterPass(Out->os()));
+    else {
+      llvm_unreachable("unknown bitcode format");
+    }
   }
 
   // Before executing passes, print the final values of the LLVM options.
@@ -771,23 +774,6 @@ int main(int argc, char **argv) {
 
   // Now that we have all of the passes ready, run them.
   Passes.run(*M.get());
-
-// @LOCALMOD-BEGIN
-  // Write bitcode to the output.
-  if (!NoOutput && !AnalyzeOnly && !OutputAssembly) {
-    switch (OutputFileFormat) {
-      case LLVMFormat:
-        WriteBitcodeToFile(M.get(), Out->os());
-        break;
-      case PNaClFormat:
-        NaClWriteBitcodeToFile(M.get(), Out->os());
-        break;
-      default:
-        errs() << "Don't understand bitcode format for generated bitcode.\n";
-        return 1;
-    }
-  }
-// @LOCALMOD-END
 
   // Declare success.
   if (!NoOutput || PrintBreakpoints)

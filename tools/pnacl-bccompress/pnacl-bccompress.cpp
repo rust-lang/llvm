@@ -539,7 +539,7 @@ protected:
     // using that abbreviations.
     unsigned AbbrevIndex = GetRecordAbbrevIndex();
 
-    const NaClBitcodeRecord::RecordVector &Values = Record.GetValues();
+    NaClBitcodeRecord::RecordVector &Values = Record.GetValues();
     if (AbbrevIndex == naclbitc::UNABBREV_RECORD) {
       Context->Writer.EmitRecord(Record.GetCode(), Values, 0);
     } else {
@@ -797,7 +797,7 @@ static bool CopyBitcode(OwningPtr<MemoryBuffer> &MemBuf,
   std::string ErrorInfo;
   OwningPtr<tool_output_file> OutFile(
       new tool_output_file(OutputFilename.c_str(), ErrorInfo,
-                           raw_fd_ostream::F_Binary));
+                           sys::fs::F_Binary));
   if (!ErrorInfo.empty())
     return Error(ErrorInfo);
 
