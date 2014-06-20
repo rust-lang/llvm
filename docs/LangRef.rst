@@ -2749,11 +2749,12 @@ number representing the maximum relative error, for example:
 '``range``' Metadata
 ^^^^^^^^^^^^^^^^^^^^
 
-``range`` metadata may be attached only to loads of integer types. It
-expresses the possible ranges the loaded value is in. The ranges are
-represented with a flattened list of integers. The loaded value is known
-to be in the union of the ranges defined by each consecutive pair. Each
-pair has the following properties:
+``range`` metadata may be attached only to ``load``, ``call`` and ``invoke`` of
+integer types. It expresses the possible ranges the loaded value or the value
+returned by the called function at this call site is in. The ranges are
+represented with a flattened list of integers. The loaded value or the value
+returned is known to be in the union of the ranges defined by each consecutive
+pair. Each pair has the following properties:
 
 -  The type must match the type loaded by the instruction.
 -  The pair ``a,b`` represents the range ``[a,b)``.
@@ -2771,8 +2772,9 @@ Examples:
 
       %a = load i8* %x, align 1, !range !0 ; Can only be 0 or 1
       %b = load i8* %y, align 1, !range !1 ; Can only be 255 (-1), 0 or 1
-      %c = load i8* %z, align 1, !range !2 ; Can only be 0, 1, 3, 4 or 5
-      %d = load i8* %z, align 1, !range !3 ; Can only be -2, -1, 3, 4 or 5
+      %c = call i8 @foo(),       !range !2 ; Can only be 0, 1, 3, 4 or 5
+      %d = invoke i8 @bar() to label %cont
+             unwind label %lpad, !range !3 ; Can only be -2, -1, 3, 4 or 5
     ...
     !0 = metadata !{ i8 0, i8 2 }
     !1 = metadata !{ i8 255, i8 2 }
@@ -3143,6 +3145,42 @@ assembly writer or object file emitter.
 Each individual option is required to be either a valid option for the target's
 linker, or an option that is reserved by the target specific assembly writer or
 object file emitter. No other aspect of these options is defined by the IR.
+
+C type width Module Flags Metadata
+----------------------------------
+
+The ARM backend emits a section into each generated object file describing the
+options that it was compiled with (in a compiler-independent way) to prevent
+linking incompatible objects, and to allow automatic library selection. Some
+of these options are not visible at the IR level, namely wchar_t width and enum
+width.
+
+To pass this information to the backend, these options are encoded in module
+flags metadata, using the following key-value pairs:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Key
+     - Value
+
+   * - short_wchar
+     - * 0 --- sizeof(wchar_t) == 4
+       * 1 --- sizeof(wchar_t) == 2
+
+   * - short_enum
+     - * 0 --- Enums are at least as large as an ``int``.
+       * 1 --- Enums are stored in the smallest integer type which can
+         represent all of its values.
+
+For example, the following metadata section specifies that the module was
+compiled with a ``wchar_t`` width of 4 bytes, and the underlying type of an
+enum is the smallest type which can represent all of its values::
+
+    !llvm.module.flags = !{!0, !1}
+    !0 = metadata !{i32 1, metadata !"short_wchar", i32 1}
+    !1 = metadata !{i32 1, metadata !"short_enum", i32 0}
 
 .. _intrinsicglobalvariables:
 

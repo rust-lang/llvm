@@ -223,29 +223,25 @@ public:
     return std::error_code(E, BitcodeErrorCategory());
   }
 
-  explicit BitcodeReader(MemoryBuffer *buffer, LLVMContext &C)
-    : Context(C), TheModule(nullptr), Buffer(buffer), BufferOwned(false),
-      LazyStreamer(nullptr), NextUnreadBit(0), SeenValueSymbolTable(false),
-      ValueList(C), MDValueList(C),
-      SeenFirstFunctionBody(false), UseRelativeIDs(false) {
-  }
+  explicit BitcodeReader(MemoryBuffer *buffer, LLVMContext &C, bool BufferOwned)
+      : Context(C), TheModule(nullptr), Buffer(buffer),
+        BufferOwned(BufferOwned), LazyStreamer(nullptr), NextUnreadBit(0),
+        SeenValueSymbolTable(false), ValueList(C), MDValueList(C),
+        SeenFirstFunctionBody(false), UseRelativeIDs(false) {}
   explicit BitcodeReader(DataStreamer *streamer, LLVMContext &C)
-    : Context(C), TheModule(nullptr), Buffer(nullptr), BufferOwned(false),
-      LazyStreamer(streamer), NextUnreadBit(0), SeenValueSymbolTable(false),
-      ValueList(C), MDValueList(C),
-      SeenFirstFunctionBody(false), UseRelativeIDs(false) {
-  }
-  ~BitcodeReader() {
-    FreeState();
-  }
+      : Context(C), TheModule(nullptr), Buffer(nullptr), BufferOwned(false),
+        LazyStreamer(streamer), NextUnreadBit(0), SeenValueSymbolTable(false),
+        ValueList(C), MDValueList(C), SeenFirstFunctionBody(false),
+        UseRelativeIDs(false) {}
+  ~BitcodeReader() { FreeState(); }
 
   void materializeForwardReferencedFunctions();
 
   void FreeState();
 
-  /// setBufferOwned - If this is true, the reader will destroy the MemoryBuffer
-  /// when the reader is destroyed.
-  void setBufferOwned(bool Owned) { BufferOwned = Owned; }
+  void releaseBuffer() {
+    Buffer = nullptr;
+  }
 
   bool isMaterializable(const GlobalValue *GV) const override;
   bool isDematerializable(const GlobalValue *GV) const override;

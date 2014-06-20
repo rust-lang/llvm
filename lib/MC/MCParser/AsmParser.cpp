@@ -345,8 +345,9 @@ private:
     DK_REFERENCE, DK_WEAK_DEFINITION, DK_WEAK_REFERENCE,
     DK_WEAK_DEF_CAN_BE_HIDDEN, DK_COMM, DK_COMMON, DK_LCOMM, DK_ABORT,
     DK_INCLUDE, DK_INCBIN, DK_CODE16, DK_CODE16GCC, DK_REPT, DK_IRP, DK_IRPC,
-    DK_IF, DK_IFNE, DK_IFB, DK_IFNB, DK_IFC, DK_IFEQS, DK_IFNC, DK_IFDEF,
-    DK_IFNDEF, DK_IFNOTDEF, DK_ELSEIF, DK_ELSE, DK_ENDIF,
+    DK_IF, DK_IFEQ, DK_IFGE, DK_IFGT, DK_IFLE, DK_IFLT, DK_IFNE, DK_IFB,
+    DK_IFNB, DK_IFC, DK_IFEQS, DK_IFNC, DK_IFDEF, DK_IFNDEF, DK_IFNOTDEF,
+    DK_ELSEIF, DK_ELSE, DK_ENDIF,
     DK_SPACE, DK_SKIP, DK_FILE, DK_LINE, DK_LOC, DK_STABS,
     DK_CFI_SECTIONS, DK_CFI_STARTPROC, DK_CFI_ENDPROC, DK_CFI_DEF_CFA,
     DK_CFI_DEF_CFA_OFFSET, DK_CFI_ADJUST_CFA_OFFSET, DK_CFI_DEF_CFA_REGISTER,
@@ -433,8 +434,8 @@ private:
   bool parseDirectiveInclude(); // ".include"
   bool parseDirectiveIncbin(); // ".incbin"
 
-  // ".if" or ".ifne"
-  bool parseDirectiveIf(SMLoc DirectiveLoc);
+  // ".if", ".ifeq", ".ifge", ".ifgt" , ".ifle", ".iflt" or ".ifne"
+  bool parseDirectiveIf(SMLoc DirectiveLoc, DirectiveKind DirKind);
   // ".ifb" or ".ifnb", depending on ExpectBlank.
   bool parseDirectiveIfb(SMLoc DirectiveLoc, bool ExpectBlank);
   // ".ifc" or ".ifnc", depending on ExpectEqual.
@@ -632,10 +633,12 @@ bool AsmParser::Run(bool NoInitialTextSection, bool NoFinalize) {
   // If we are generating dwarf for assembly source files save the initial text
   // section and generate a .file directive.
   if (getContext().getGenDwarfForAssembly()) {
-    getContext().setGenDwarfSection(getStreamer().getCurrentSection().first);
     MCSymbol *SectionStartSym = getContext().CreateTempSymbol();
     getStreamer().EmitLabel(SectionStartSym);
-    getContext().setGenDwarfSectionStartSym(SectionStartSym);
+    auto InsertResult = getContext().addGenDwarfSection(
+        getStreamer().getCurrentSection().first);
+    assert(InsertResult.second && ".text section should not have debug info yet");
+    InsertResult.first->second.first = SectionStartSym;
     getContext().setGenDwarfFileNumber(getStreamer().EmitDwarfFileDirective(
         0, StringRef(), getContext().getMainFileName()));
   }
@@ -811,7 +814,19 @@ bool AsmParser::parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) {
     // Parse symbol variant
     std::pair<StringRef, StringRef> Split;
     if (!MAI.useParensForSymbolVariant()) {
-      Split = Identifier.split('@');
+      if (FirstTokenKind == AsmToken::String) {
+        if (Lexer.is(AsmToken::At)) {
+          Lexer.Lex(); // eat @
+          SMLoc AtLoc = getLexer().getLoc();
+          StringRef VName;
+          if (parseIdentifier(VName))
+            return Error(AtLoc, "expected symbol variant after '@'");
+
+          Split = std::make_pair(Identifier, VName);
+        }
+      } else {
+        Split = Identifier.split('@');
+      }
     } else if (Lexer.is(AsmToken::LParen)) {
       Lexer.Lex(); // eat (
       StringRef VName;
@@ -1229,8 +1244,13 @@ bool AsmParser::parseStatement(ParseStatementInfo &Info) {
   default:
     break;
   case DK_IF:
+  case DK_IFEQ:
+  case DK_IFGE:
+  case DK_IFGT:
+  case DK_IFLE:
+  case DK_IFLT:
   case DK_IFNE:
-    return parseDirectiveIf(IDLoc);
+    return parseDirectiveIf(IDLoc, DirKind);
   case DK_IFB:
     return parseDirectiveIfb(IDLoc, true);
   case DK_IFNB:
@@ -1574,12 +1594,11 @@ bool AsmParser::parseStatement(ParseStatementInfo &Info) {
     printMessage(IDLoc, SourceMgr::DK_Note, OS.str());
   }
 
-  // If we are generating dwarf for assembly source files and the current
-  // section is the initial text section then generate a .loc directive for
-  // the instruction.
+  // If we are generating dwarf for the current section then generate a .loc
+  // directive for the instruction.
   if (!HadError && getContext().getGenDwarfForAssembly() &&
-      getContext().getGenDwarfSection() ==
-          getStreamer().getCurrentSection().first) {
+      getContext().getGenDwarfSectionSyms().count(
+        getStreamer().getCurrentSection().first)) {
 
     unsigned Line = SrcMgr.FindLineNumber(IDLoc, CurBuffer);
 
@@ -2011,7 +2030,7 @@ bool AsmParser::parseMacroArguments(const MCAsmMacro *M,
           break;
 
       if (FAI >= NParameters) {
-	assert(M && "expected macro to be defined");
+    assert(M && "expected macro to be defined");
         Error(IDLoc,
               "parameter named '" + FA.Name + "' does not exist for macro '" +
               M->Name + "'");
@@ -3792,9 +3811,8 @@ bool AsmParser::parseDirectiveIncbin() {
 }
 
 /// parseDirectiveIf
-/// ::= .if expression
-/// ::= .ifne expression
-bool AsmParser::parseDirectiveIf(SMLoc DirectiveLoc) {
+/// ::= .if{,eq,ge,gt,le,lt,ne} expression
+bool AsmParser::parseDirectiveIf(SMLoc DirectiveLoc, DirectiveKind DirKind) {
   TheCondStack.push_back(TheCondState);
   TheCondState.TheCond = AsmCond::IfCond;
   if (TheCondState.Ignore) {
@@ -3808,6 +3826,29 @@ bool AsmParser::parseDirectiveIf(SMLoc DirectiveLoc) {
       return TokError("unexpected token in '.if' directive");
 
     Lex();
+
+    switch (DirKind) {
+    default:
+      llvm_unreachable("unsupported directive");
+    case DK_IF:
+    case DK_IFNE:
+      break;
+    case DK_IFEQ:
+      ExprValue = ExprValue == 0;
+      break;
+    case DK_IFGE:
+      ExprValue = ExprValue >= 0;
+      break;
+    case DK_IFGT:
+      ExprValue = ExprValue > 0;
+      break;
+    case DK_IFLE:
+      ExprValue = ExprValue <= 0;
+      break;
+    case DK_IFLT:
+      ExprValue = ExprValue < 0;
+      break;
+    }
 
     TheCondState.CondMet = ExprValue;
     TheCondState.Ignore = !TheCondState.CondMet;
@@ -4111,6 +4152,11 @@ void AsmParser::initializeDirectiveKindMap() {
   DirectiveKindMap[".bundle_lock"] = DK_BUNDLE_LOCK;
   DirectiveKindMap[".bundle_unlock"] = DK_BUNDLE_UNLOCK;
   DirectiveKindMap[".if"] = DK_IF;
+  DirectiveKindMap[".ifeq"] = DK_IFEQ;
+  DirectiveKindMap[".ifge"] = DK_IFGE;
+  DirectiveKindMap[".ifgt"] = DK_IFGT;
+  DirectiveKindMap[".ifle"] = DK_IFLE;
+  DirectiveKindMap[".iflt"] = DK_IFLT;
   DirectiveKindMap[".ifne"] = DK_IFNE;
   DirectiveKindMap[".ifb"] = DK_IFB;
   DirectiveKindMap[".ifnb"] = DK_IFNB;

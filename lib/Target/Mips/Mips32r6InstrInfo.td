@@ -77,6 +77,11 @@ class BGEZC_ENC : CMP_BRANCH_1R_BOTH_OFF16_FM<OPGROUP_BLEZL>,
 class BGTZALC_ENC : CMP_BRANCH_1R_RT_OFF16_FM<OPGROUP_BGTZ>,
                     DecodeDisambiguatedBy<"BgtzGroupBranch">;
 
+class BLTC_ENC : CMP_BRANCH_2R_OFF16_FM<OPGROUP_BGTZL>,
+                 DecodeDisambiguatedBy<"BgtzlGroupBranch">;
+class BLTUC_ENC : CMP_BRANCH_2R_OFF16_FM<OPGROUP_BGTZ>,
+                  DecodeDisambiguatedBy<"BgtzGroupBranch">;
+
 class BLEZC_ENC : CMP_BRANCH_1R_RT_OFF16_FM<OPGROUP_BLEZL>,
                   DecodeDisambiguatedBy<"BlezlGroupBranch">;
 class BLTZALC_ENC : CMP_BRANCH_1R_BOTH_OFF16_FM<OPGROUP_BGTZ>,
@@ -154,6 +159,8 @@ class LDC2_R6_ENC : COP2LDST_FM<OPCODE5_LDC2>;
 class LWC2_R6_ENC : COP2LDST_FM<OPCODE5_LWC2>;
 class SDC2_R6_ENC : COP2LDST_FM<OPCODE5_SDC2>;
 class SWC2_R6_ENC : COP2LDST_FM<OPCODE5_SWC2>;
+
+class LSA_R6_ENC : SPECIAL_LSA_FM<OPCODE6_LSA>;
 
 class LL_R6_ENC : SPECIAL3_LL_SC_FM<OPCODE6_LL>;
 class SC_R6_ENC : SPECIAL3_LL_SC_FM<OPCODE6_SC>;
@@ -328,6 +335,9 @@ class BGEC_DESC : CMP_BC_DESC_BASE<"bgec", brtarget, GPR32Opnd>;
 class BGEUC_DESC : CMP_BC_DESC_BASE<"bgeuc", brtarget, GPR32Opnd>;
 class BEQC_DESC : CMP_BC_DESC_BASE<"beqc", brtarget, GPR32Opnd>;
 class BNEC_DESC : CMP_BC_DESC_BASE<"bnec", brtarget, GPR32Opnd>;
+
+class BLTC_DESC : CMP_BC_DESC_BASE<"bltc", brtarget, GPR32Opnd>;
+class BLTUC_DESC : CMP_BC_DESC_BASE<"bltuc", brtarget, GPR32Opnd>;
 
 class BLTZC_DESC : CMP_CBR_RT_Z_DESC_BASE<"bltzc", brtarget, GPR32Opnd>;
 class BGEZC_DESC : CMP_CBR_RT_Z_DESC_BASE<"bgezc", brtarget, GPR32Opnd>;
@@ -566,6 +576,16 @@ class COP2ST_DESC_BASE<string instr_asm, RegisterOperand COPOpnd> {
 class SDC2_R6_DESC : COP2ST_DESC_BASE<"sdc2", COP2Opnd>;
 class SWC2_R6_DESC : COP2ST_DESC_BASE<"swc2", COP2Opnd>;
 
+class LSA_R6_DESC_BASE<string instr_asm, RegisterOperand GPROpnd,
+                       Operand ImmOpnd> {
+  dag OutOperandList = (outs GPROpnd:$rd);
+  dag InOperandList = (ins GPROpnd:$rs, GPROpnd:$rt, ImmOpnd:$imm2);
+  string AsmString = !strconcat(instr_asm, "\t$rd, $rs, $rt, $imm2");
+  list<dag> Pattern = [];
+}
+
+class LSA_R6_DESC : LSA_R6_DESC_BASE<"lsa", GPR32Opnd, uimm2>;
+
 class LL_R6_DESC_BASE<string instr_asm, RegisterOperand GPROpnd> {
   dag OutOperandList = (outs GPROpnd:$rt);
   dag InOperandList = (ins mem_simm9:$addr);
@@ -636,8 +656,8 @@ def BGTZC : BGTZC_ENC, BGTZC_DESC, ISA_MIPS32R6;
 def BITSWAP : BITSWAP_ENC, BITSWAP_DESC, ISA_MIPS32R6;
 def BLEZALC : BLEZALC_ENC, BLEZALC_DESC, ISA_MIPS32R6;
 def BLEZC : BLEZC_ENC, BLEZC_DESC, ISA_MIPS32R6;
-def BLTC; // Also aliased to bgtc with operands swapped
-def BLTUC; // Also aliased to bgtuc with operands swapped
+def BLTC : BLTC_ENC, BLTC_DESC, ISA_MIPS32R6;
+def BLTUC : BLTUC_ENC, BLTUC_DESC, ISA_MIPS32R6;
 def BLTZALC : BLTZALC_ENC, BLTZALC_DESC, ISA_MIPS32R6;
 def BLTZC : BLTZC_ENC, BLTZC_DESC, ISA_MIPS32R6;
 def BNEC : BNEC_ENC, BNEC_DESC, ISA_MIPS32R6;
@@ -659,7 +679,7 @@ def JIC : JIC_ENC, JIC_DESC, ISA_MIPS32R6;
 def JR_HB_R6 : JR_HB_R6_ENC, JR_HB_R6_DESC, ISA_MIPS32R6;
 def LDC2_R6 : LDC2_R6_ENC, LDC2_R6_DESC, ISA_MIPS32R6;
 def LL_R6 : LL_R6_ENC, LL_R6_DESC, ISA_MIPS32R6;
-// def LSA; // See MSA
+def LSA_R6 : LSA_R6_ENC, LSA_R6_DESC, ISA_MIPS32R6;
 def LWC2_R6 : LWC2_R6_ENC, LWC2_R6_DESC, ISA_MIPS32R6;
 def LWPC : LWPC_ENC, LWPC_DESC, ISA_MIPS32R6;
 def LWUPC : LWUPC_ENC, LWUPC_DESC, ISA_MIPS32R6;

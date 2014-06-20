@@ -44,7 +44,6 @@ public:
 private:
   std::string DevName;
   bool Is64bit;
-  bool Is32on64bit;
   bool DumpCode;
   bool R600ALUInst;
   bool HasVertexCache;
@@ -56,6 +55,7 @@ private:
   bool EnableIfCvt;
   unsigned WavefrontSize;
   bool CFALUBug;
+  int LocalMemorySize;
 
   InstrItineraryData InstrItins;
 
@@ -109,6 +109,7 @@ public:
   unsigned getWavefrontSize() const;
   unsigned getStackEntrySize() const;
   bool hasCFAluBug() const;
+  int getLocalMemorySize() const;
 
   bool enableMachineScheduler() const override {
     return getGeneration() <= NORTHERN_ISLANDS;

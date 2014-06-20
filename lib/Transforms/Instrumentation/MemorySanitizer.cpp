@@ -1397,13 +1397,61 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     SC.Done(&I);
   }
 
+  // \brief Handle multiplication by constant.
+  //
+  // Handle a special case of multiplication by constant that may have one or
+  // more zeros in the lower bits. This makes corresponding number of lower bits
+  // of the result zero as well. We model it by shifting the other operand
+  // shadow left by the required number of bits. Effectively, we transform
+  // (X * (A * 2**B)) to ((X << B) * A) and instrument (X << B) as (Sx << B).
+  // We use multiplication by 2**N instead of shift to cover the case of
+  // multiplication by 0, which may occur in some elements of a vector operand.
+  void handleMulByConstant(BinaryOperator &I, Constant *ConstArg,
+                           Value *OtherArg) {
+    Constant *ShadowMul;
+    Type *Ty = ConstArg->getType();
+    if (Ty->isVectorTy()) {
+      unsigned NumElements = Ty->getVectorNumElements();
+      Type *EltTy = Ty->getSequentialElementType();
+      SmallVector<Constant *, 16> Elements;
+      for (unsigned Idx = 0; Idx < NumElements; ++Idx) {
+        ConstantInt *Elt =
+            dyn_cast<ConstantInt>(ConstArg->getAggregateElement(Idx));
+        APInt V = Elt->getValue();
+        APInt V2 = APInt(V.getBitWidth(), 1) << V.countTrailingZeros();
+        Elements.push_back(ConstantInt::get(EltTy, V2));
+      }
+      ShadowMul = ConstantVector::get(Elements);
+    } else {
+      ConstantInt *Elt = dyn_cast<ConstantInt>(ConstArg);
+      APInt V = Elt->getValue();
+      APInt V2 = APInt(V.getBitWidth(), 1) << V.countTrailingZeros();
+      ShadowMul = ConstantInt::get(Elt->getType(), V2);
+    }
+
+    IRBuilder<> IRB(&I);
+    setShadow(&I,
+              IRB.CreateMul(getShadow(OtherArg), ShadowMul, "msprop_mul_cst"));
+    setOrigin(&I, getOrigin(OtherArg));
+  }
+
+  void visitMul(BinaryOperator &I) {
+    Constant *constOp0 = dyn_cast<Constant>(I.getOperand(0));
+    Constant *constOp1 = dyn_cast<Constant>(I.getOperand(1));
+    if (constOp0 && !constOp1)
+      handleMulByConstant(I, constOp0, I.getOperand(1));
+    else if (constOp1 && !constOp0)
+      handleMulByConstant(I, constOp1, I.getOperand(0));
+    else
+      handleShadowOr(I);
+  }
+
   void visitFAdd(BinaryOperator &I) { handleShadowOr(I); }
   void visitFSub(BinaryOperator &I) { handleShadowOr(I); }
   void visitFMul(BinaryOperator &I) { handleShadowOr(I); }
   void visitAdd(BinaryOperator &I) { handleShadowOr(I); }
   void visitSub(BinaryOperator &I) { handleShadowOr(I); }
   void visitXor(BinaryOperator &I) { handleShadowOr(I); }
-  void visitMul(BinaryOperator &I) { handleShadowOr(I); }
 
   void handleDiv(Instruction &I) {
     IRBuilder<> IRB(&I);
@@ -1970,10 +2018,10 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
   }
 
-  // \brief Instrument vector shift instrinsic.
+  // \brief Instrument vector pack instrinsic.
   //
   // This function instruments intrinsics like x86_mmx_packsswb, that
-  // packs elements of 2 input vectors into half as much bits with saturation.
+  // packs elements of 2 input vectors into half as many bits with saturation.
   // Shadow is propagated with the signed variant of the same intrinsic applied
   // to sext(Sa != zeroinitializer), sext(Sb != zeroinitializer).
   // EltSizeInBits is used only for x86mmx arguments.
@@ -2008,6 +2056,40 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
 
     Value *S = IRB.CreateCall2(ShadowFn, S1_ext, S2_ext, "_msprop_vector_pack");
     if (isX86_MMX) S = IRB.CreateBitCast(S, getShadowTy(&I));
+    setShadow(&I, S);
+    setOriginForNaryOp(I);
+  }
+
+  // \brief Instrument sum-of-absolute-differencies intrinsic.
+  void handleVectorSadIntrinsic(IntrinsicInst &I) {
+    const unsigned SignificantBitsPerResultElement = 16;
+    bool isX86_MMX = I.getOperand(0)->getType()->isX86_MMXTy();
+    Type *ResTy = isX86_MMX ? IntegerType::get(*MS.C, 64) : I.getType();
+    unsigned ZeroBitsPerResultElement =
+        ResTy->getScalarSizeInBits() - SignificantBitsPerResultElement;
+
+    IRBuilder<> IRB(&I);
+    Value *S = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    S = IRB.CreateBitCast(S, ResTy);
+    S = IRB.CreateSExt(IRB.CreateICmpNE(S, Constant::getNullValue(ResTy)),
+                       ResTy);
+    S = IRB.CreateLShr(S, ZeroBitsPerResultElement);
+    S = IRB.CreateBitCast(S, getShadowTy(&I));
+    setShadow(&I, S);
+    setOriginForNaryOp(I);
+  }
+
+  // \brief Instrument multiply-add intrinsic.
+  void handleVectorPmaddIntrinsic(IntrinsicInst &I,
+                                  unsigned EltSizeInBits = 0) {
+    bool isX86_MMX = I.getOperand(0)->getType()->isX86_MMXTy();
+    Type *ResTy = isX86_MMX ? getMMXVectorTy(EltSizeInBits * 2) : I.getType();
+    IRBuilder<> IRB(&I);
+    Value *S = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    S = IRB.CreateBitCast(S, ResTy);
+    S = IRB.CreateSExt(IRB.CreateICmpNE(S, Constant::getNullValue(ResTy)),
+                       ResTy);
+    S = IRB.CreateBitCast(S, getShadowTy(&I));
     setShadow(&I, S);
     setOriginForNaryOp(I);
   }
@@ -2146,6 +2228,27 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
 
     case llvm::Intrinsic::x86_mmx_packssdw:
       handleVectorPackIntrinsic(I, 32);
+      break;
+
+    case llvm::Intrinsic::x86_mmx_psad_bw:
+    case llvm::Intrinsic::x86_sse2_psad_bw:
+    case llvm::Intrinsic::x86_avx2_psad_bw:
+      handleVectorSadIntrinsic(I);
+      break;
+
+    case llvm::Intrinsic::x86_sse2_pmadd_wd:
+    case llvm::Intrinsic::x86_avx2_pmadd_wd:
+    case llvm::Intrinsic::x86_ssse3_pmadd_ub_sw_128:
+    case llvm::Intrinsic::x86_avx2_pmadd_ub_sw:
+      handleVectorPmaddIntrinsic(I);
+      break;
+
+    case llvm::Intrinsic::x86_ssse3_pmadd_ub_sw:
+      handleVectorPmaddIntrinsic(I, 8);
+      break;
+
+    case llvm::Intrinsic::x86_mmx_pmadd_wd:
+      handleVectorPmaddIntrinsic(I, 16);
       break;
 
     default:

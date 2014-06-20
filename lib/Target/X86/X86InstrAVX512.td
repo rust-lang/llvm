@@ -1798,7 +1798,36 @@ def VMOVNTDQAZrm : AVX5128I<0x2A, MRMSrcMem, (outs VR512:$dst),
                             "vmovntdqa\t{$src, $dst|$dst, $src}",
                             [(set VR512:$dst,
                               (int_x86_avx512_movntdqa addr:$src))]>,
-                   EVEX, EVEX_V512;
+                   EVEX, EVEX_V512, EVEX_CD8<64, CD8VF>;
+
+// Prefer non-temporal over temporal versions
+let AddedComplexity = 400, SchedRW = [WriteStore] in {
+
+def VMOVNTPSZmr : AVX512PSI<0x2B, MRMDestMem, (outs),
+                            (ins f512mem:$dst, VR512:$src),
+                            "vmovntps\t{$src, $dst|$dst, $src}",
+                            [(alignednontemporalstore (v16f32 VR512:$src),
+                                                      addr:$dst)],
+                            IIC_SSE_MOVNT>,
+                  EVEX, EVEX_V512, EVEX_CD8<32, CD8VF>;
+
+def VMOVNTPDZmr : AVX512PDI<0x2B, MRMDestMem, (outs),
+                            (ins f512mem:$dst, VR512:$src),
+                            "vmovntpd\t{$src, $dst|$dst, $src}",
+                            [(alignednontemporalstore (v8f64 VR512:$src),
+                                                      addr:$dst)],
+			    IIC_SSE_MOVNT>,
+                  EVEX, EVEX_V512, VEX_W, EVEX_CD8<64, CD8VF>;
+
+
+def VMOVNTDQZmr : AVX512BI<0xE7, MRMDestMem, (outs),
+                           (ins i512mem:$dst, VR512:$src),
+                           "vmovntdq\t{$src, $dst|$dst, $src}",
+                           [(alignednontemporalstore (v8i64 VR512:$src),
+                                                     addr:$dst)],
+                           IIC_SSE_MOVNT>,
+                  EVEX, EVEX_V512, EVEX_CD8<64, CD8VF>;
+}
 
 //===----------------------------------------------------------------------===//
 // AVX-512 - Integer arithmetic
@@ -3173,6 +3202,10 @@ def : Pat<(v8f32 (uint_to_fp (v8i32 VR256X:$src1))),
 def : Pat<(v4f32 (uint_to_fp (v4i32 VR128X:$src1))),
           (EXTRACT_SUBREG (v16f32 (VCVTUDQ2PSZrr
            (v16i32 (SUBREG_TO_REG (i32 0), VR128X:$src1, sub_xmm)))), sub_xmm)>;
+
+def : Pat<(v4f64 (uint_to_fp (v4i32 VR128X:$src1))),
+          (EXTRACT_SUBREG (v8f64 (VCVTUDQ2PDZrr
+           (v8i32 (SUBREG_TO_REG (i32 0), VR128X:$src1, sub_xmm)))), sub_ymm)>;
 
 def : Pat<(v16f32 (int_x86_avx512_mask_cvtdq2ps_512 (v16i32 VR512:$src),
                    (bc_v16f32 (v16i32 immAllZerosV)), (i16 -1), imm:$rc)),

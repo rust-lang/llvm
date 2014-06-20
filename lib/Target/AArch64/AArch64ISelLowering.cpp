@@ -823,8 +823,7 @@ AArch64TargetLowering::EmitInstrWithCustomInserter(MachineInstr *MI,
 #ifndef NDEBUG
     MI->dump();
 #endif
-    assert(0 && "Unexpected instruction for custom inserter!");
-    break;
+    llvm_unreachable("Unexpected instruction for custom inserter!");
 
   case AArch64::F128CSEL:
     return EmitF128CSEL(MI, BB);
@@ -833,7 +832,6 @@ AArch64TargetLowering::EmitInstrWithCustomInserter(MachineInstr *MI,
   case TargetOpcode::PATCHPOINT:
     return emitPatchPoint(MI, BB);
   }
-  llvm_unreachable("Unexpected instruction for custom inserter!");
 }
 
 //===----------------------------------------------------------------------===//
@@ -1273,7 +1271,7 @@ static SDValue LowerADDC_ADDE_SUBC_SUBE(SDValue Op, SelectionDAG &DAG) {
   bool ExtraOp = false;
   switch (Op.getOpcode()) {
   default:
-    assert(0 && "Invalid code");
+    llvm_unreachable("Invalid code");
   case ISD::ADDC:
     Opc = AArch64ISD::ADDS;
     break;
@@ -4110,6 +4108,7 @@ static SDValue NarrowVector(SDValue V128Reg, SelectionDAG &DAG) {
 // shuffle in combination with VEXTs.
 SDValue AArch64TargetLowering::ReconstructShuffle(SDValue Op,
                                                   SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::BUILD_VECTOR && "Unknown opcode!");
   SDLoc dl(Op);
   EVT VT = Op.getValueType();
   unsigned NumElts = VT.getVectorNumElements();
@@ -4158,35 +4157,47 @@ SDValue AArch64TargetLowering::ReconstructShuffle(SDValue Op,
 
   SDValue ShuffleSrcs[2] = { DAG.getUNDEF(VT), DAG.getUNDEF(VT) };
   int VEXTOffsets[2] = { 0, 0 };
+  int OffsetMultipliers[2] = { 1, 1 };
 
   // This loop extracts the usage patterns of the source vectors
   // and prepares appropriate SDValues for a shuffle if possible.
   for (unsigned i = 0; i < SourceVecs.size(); ++i) {
-    if (SourceVecs[i].getValueType() == VT) {
+    unsigned NumSrcElts = SourceVecs[i].getValueType().getVectorNumElements();
+    SDValue CurSource = SourceVecs[i];
+    if (SourceVecs[i].getValueType().getVectorElementType() !=
+        VT.getVectorElementType()) {
+      // It may hit this case if SourceVecs[i] is AssertSext/AssertZext.
+      // Then bitcast it to the vector which holds asserted element type,
+      // and record the multiplier of element width between SourceVecs and
+      // Build_vector which is needed to extract the correct lanes later.
+      EVT CastVT =
+          EVT::getVectorVT(*DAG.getContext(), VT.getVectorElementType(),
+                           SourceVecs[i].getValueSizeInBits() /
+                               VT.getVectorElementType().getSizeInBits());
+
+      CurSource = DAG.getNode(ISD::BITCAST, dl, CastVT, SourceVecs[i]);
+      OffsetMultipliers[i] = CastVT.getVectorNumElements() / NumSrcElts;
+      NumSrcElts *= OffsetMultipliers[i];
+      MaxElts[i] *= OffsetMultipliers[i];
+      MinElts[i] *= OffsetMultipliers[i];
+    }
+
+    if (CurSource.getValueType() == VT) {
       // No VEXT necessary
-      ShuffleSrcs[i] = SourceVecs[i];
+      ShuffleSrcs[i] = CurSource;
       VEXTOffsets[i] = 0;
       continue;
-    } else if (SourceVecs[i].getValueType().getVectorNumElements() < NumElts) {
+    } else if (NumSrcElts < NumElts) {
       // We can pad out the smaller vector for free, so if it's part of a
       // shuffle...
-      ShuffleSrcs[i] = DAG.getNode(ISD::CONCAT_VECTORS, dl, VT, SourceVecs[i],
-                                   DAG.getUNDEF(SourceVecs[i].getValueType()));
+      ShuffleSrcs[i] = DAG.getNode(ISD::CONCAT_VECTORS, dl, VT, CurSource,
+                                   DAG.getUNDEF(CurSource.getValueType()));
       continue;
     }
 
-    // Don't attempt to extract subvectors from BUILD_VECTOR sources
-    // that expand or trunc the original value.
-    // TODO: We can try to bitcast and ANY_EXTEND the result but
-    // we need to consider the cost of vector ANY_EXTEND, and the
-    // legality of all the types.
-    if (SourceVecs[i].getValueType().getVectorElementType() !=
-        VT.getVectorElementType())
-      return SDValue();
-
     // Since only 64-bit and 128-bit vectors are legal on ARM and
     // we've eliminated the other cases...
-    assert(SourceVecs[i].getValueType().getVectorNumElements() == 2 * NumElts &&
+    assert(NumSrcElts == 2 * NumElts &&
            "unexpected vector sizes in ReconstructShuffle");
 
     if (MaxElts[i] - MinElts[i] >= NumElts) {
@@ -4197,22 +4208,20 @@ SDValue AArch64TargetLowering::ReconstructShuffle(SDValue Op,
     if (MinElts[i] >= NumElts) {
       // The extraction can just take the second half
       VEXTOffsets[i] = NumElts;
-      ShuffleSrcs[i] =
-          DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT, SourceVecs[i],
-                      DAG.getIntPtrConstant(NumElts));
+      ShuffleSrcs[i] = DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT, CurSource,
+                                   DAG.getIntPtrConstant(NumElts));
     } else if (MaxElts[i] < NumElts) {
       // The extraction can just take the first half
       VEXTOffsets[i] = 0;
-      ShuffleSrcs[i] = DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT,
-                                   SourceVecs[i], DAG.getIntPtrConstant(0));
+      ShuffleSrcs[i] = DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT, CurSource,
+                                   DAG.getIntPtrConstant(0));
     } else {
       // An actual VEXT is needed
       VEXTOffsets[i] = MinElts[i];
-      SDValue VEXTSrc1 = DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT,
-                                     SourceVecs[i], DAG.getIntPtrConstant(0));
-      SDValue VEXTSrc2 =
-          DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT, SourceVecs[i],
-                      DAG.getIntPtrConstant(NumElts));
+      SDValue VEXTSrc1 = DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT, CurSource,
+                                     DAG.getIntPtrConstant(0));
+      SDValue VEXTSrc2 = DAG.getNode(ISD::EXTRACT_SUBVECTOR, dl, VT, CurSource,
+                                     DAG.getIntPtrConstant(NumElts));
       unsigned Imm = VEXTOffsets[i] * getExtFactor(VEXTSrc1);
       ShuffleSrcs[i] = DAG.getNode(AArch64ISD::EXT, dl, VT, VEXTSrc1, VEXTSrc2,
                                    DAG.getConstant(Imm, MVT::i32));
@@ -4232,9 +4241,10 @@ SDValue AArch64TargetLowering::ReconstructShuffle(SDValue Op,
     int ExtractElt =
         cast<ConstantSDNode>(Op.getOperand(i).getOperand(1))->getSExtValue();
     if (ExtractVec == SourceVecs[0]) {
-      Mask.push_back(ExtractElt - VEXTOffsets[0]);
+      Mask.push_back(ExtractElt * OffsetMultipliers[0] - VEXTOffsets[0]);
     } else {
-      Mask.push_back(ExtractElt + NumElts - VEXTOffsets[1]);
+      Mask.push_back(ExtractElt * OffsetMultipliers[1] + NumElts -
+                     VEXTOffsets[1]);
     }
   }
 
@@ -6674,7 +6684,7 @@ static SDValue tryCombineFixedPointConvert(SDNode *N,
     else if (Vec.getValueType() == MVT::v2i64)
       VecResTy = MVT::v2f64;
     else
-      assert(0 && "unexpected vector type!");
+      llvm_unreachable("unexpected vector type!");
 
     SDValue Convert =
         DAG.getNode(ISD::INTRINSIC_WO_CHAIN, DL, VecResTy, IID, Vec, Shift);

@@ -40,7 +40,6 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Memory.h"
-#include "llvm/Support/MutexGuard.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetJITInfo.h"
@@ -50,6 +49,7 @@
 #ifndef NDEBUG
 #include <iomanip>
 #endif
+#include <mutex>
 using namespace llvm;
 
 #define DEBUG_TYPE "jit"
@@ -121,21 +121,16 @@ namespace {
 #endif
     }
 
-    FunctionToLazyStubMapTy& getFunctionToLazyStubMap(
-      const MutexGuard& locked) {
-      assert(locked.holds(TheJIT->lock));
+    FunctionToLazyStubMapTy& getFunctionToLazyStubMap() {
       return FunctionToLazyStubMap;
     }
 
-    GlobalToIndirectSymMapTy& getGlobalToIndirectSymMap(const MutexGuard& lck) {
-      assert(lck.holds(TheJIT->lock));
+    GlobalToIndirectSymMapTy& getGlobalToIndirectSymMap() {
       return GlobalToIndirectSymMap;
     }
 
     std::pair<void *, Function *> LookupFunctionFromCallSite(
-        const MutexGuard &locked, void *CallSite) const {
-      assert(locked.holds(TheJIT->lock));
-
+        void *CallSite) const {
       // The address given to us for the stub may not be exactly right, it
       // might be a little bit after the stub.  As such, use upper_bound to
       // find it.
@@ -147,9 +142,7 @@ namespace {
       return *I;
     }
 
-    void AddCallSite(const MutexGuard &locked, void *CallSite, Function *F) {
-      assert(locked.holds(TheJIT->lock));
-
+    void AddCallSite(void *CallSite, Function *F) {
       bool Inserted = CallSiteToFunctionMap.insert(
           std::make_pair(CallSite, F)).second;
       (void)Inserted;
@@ -237,22 +230,22 @@ namespace {
     std::map<void*, JITResolver*> Map;
 
     /// Guards Map from concurrent accesses.
-    mutable sys::Mutex Lock;
+    mutable std::recursive_mutex Lock;
 
   public:
     /// Registers a Stub to be resolved by Resolver.
     void RegisterStubResolver(void *Stub, JITResolver *Resolver) {
-      MutexGuard guard(Lock);
+      std::lock_guard<std::recursive_mutex> guard(Lock);
       Map.insert(std::make_pair(Stub, Resolver));
     }
     /// Unregisters the Stub when it's invalidated.
     void UnregisterStubResolver(void *Stub) {
-      MutexGuard guard(Lock);
+      std::lock_guard<std::recursive_mutex> guard(Lock);
       Map.erase(Stub);
     }
     /// Returns the JITResolver instance that owns the Stub.
     JITResolver *getResolverFromStub(void *Stub) const {
-      MutexGuard guard(Lock);
+      std::lock_guard<std::recursive_mutex> guard(Lock);
       // The address given to us for the stub may not be exactly right, it might
       // be a little bit after the stub.  As such, use upper_bound to find it.
       // This is the same trick as in LookupFunctionFromCallSite from
@@ -265,7 +258,7 @@ namespace {
     /// True if any stubs refer to the given resolver. Only used in an assert().
     /// O(N)
     bool ResolverHasStubs(JITResolver* Resolver) const {
-      MutexGuard guard(Lock);
+      std::lock_guard<std::recursive_mutex> guard(Lock);
       for (std::map<void*, JITResolver*>::const_iterator I = Map.begin(),
              E = Map.end(); I != E; ++I) {
         if (I->second == Resolver)
@@ -501,19 +494,19 @@ JITResolver::~JITResolver() {
 /// getLazyFunctionStubIfAvailable - This returns a pointer to a function stub
 /// if it has already been created.
 void *JITResolver::getLazyFunctionStubIfAvailable(Function *F) {
-  MutexGuard locked(TheJIT->lock);
+  std::lock_guard<std::recursive_mutex> guard(TheJIT->lock);
 
   // If we already have a stub for this function, recycle it.
-  return state.getFunctionToLazyStubMap(locked).lookup(F);
+  return state.getFunctionToLazyStubMap().lookup(F);
 }
 
 /// getFunctionStub - This returns a pointer to a function stub, creating
 /// one on demand as needed.
 void *JITResolver::getLazyFunctionStub(Function *F) {
-  MutexGuard locked(TheJIT->lock);
+  std::lock_guard<std::recursive_mutex> guard(TheJIT->lock);
 
   // If we already have a lazy stub for this function, recycle it.
-  void *&Stub = state.getFunctionToLazyStubMap(locked)[F];
+  void *&Stub = state.getFunctionToLazyStubMap()[F];
   if (Stub) return Stub;
 
   // Call the lazy resolver function if we are JIT'ing lazily.  Otherwise we
@@ -555,7 +548,7 @@ void *JITResolver::getLazyFunctionStub(Function *F) {
 
     // Finally, keep track of the stub-to-Function mapping so that the
     // JITCompilerFn knows which function to compile!
-    state.AddCallSite(locked, Stub, F);
+    state.AddCallSite(Stub, F);
   } else if (!Actual) {
     // If we are JIT'ing non-lazily but need to call a function that does not
     // exist yet, add it to the JIT's work list so that we can fill in the
@@ -571,10 +564,10 @@ void *JITResolver::getLazyFunctionStub(Function *F) {
 /// getGlobalValueIndirectSym - Return a lazy pointer containing the specified
 /// GV address.
 void *JITResolver::getGlobalValueIndirectSym(GlobalValue *GV, void *GVAddress) {
-  MutexGuard locked(TheJIT->lock);
+  std::lock_guard<std::recursive_mutex> guard(TheJIT->lock);
 
   // If we already have a stub for this global variable, recycle it.
-  void *&IndirectSym = state.getGlobalToIndirectSymMap(locked)[GV];
+  void *&IndirectSym = state.getGlobalToIndirectSymMap()[GV];
   if (IndirectSym) return IndirectSym;
 
   // Otherwise, codegen a new indirect symbol.
@@ -629,12 +622,12 @@ void *JITResolver::JITCompilerFn(void *Stub) {
     // Only lock for getting the Function. The call getPointerToFunction made
     // in this function might trigger function materializing, which requires
     // JIT lock to be unlocked.
-    MutexGuard locked(JR->TheJIT->lock);
+    std::lock_guard<std::recursive_mutex> guard(JR->TheJIT->lock);
 
     // The address given to us for the stub may not be exactly right, it might
     // be a little bit after the stub.  As such, use upper_bound to find it.
     std::pair<void*, Function*> I =
-      JR->state.LookupFunctionFromCallSite(locked, Stub);
+      JR->state.LookupFunctionFromCallSite(Stub);
     F = I.second;
     ActualPtr = I.first;
   }
@@ -661,7 +654,7 @@ void *JITResolver::JITCompilerFn(void *Stub) {
   }
 
   // Reacquire the lock to update the GOT map.
-  MutexGuard locked(JR->TheJIT->lock);
+  std::lock_guard<std::recursive_mutex> locked(JR->TheJIT->lock);
 
   // We might like to remove the call site from the CallSiteToFunction map, but
   // we can't do that! Multiple threads could be stuck, waiting to acquire the

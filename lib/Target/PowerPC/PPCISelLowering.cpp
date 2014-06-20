@@ -773,7 +773,6 @@ const char *PPCTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case PPCISD::Hi:              return "PPCISD::Hi";
   case PPCISD::Lo:              return "PPCISD::Lo";
   case PPCISD::TOC_ENTRY:       return "PPCISD::TOC_ENTRY";
-  case PPCISD::TOC_RESTORE:     return "PPCISD::TOC_RESTORE";
   case PPCISD::LOAD:            return "PPCISD::LOAD";
   case PPCISD::LOAD_TOC:        return "PPCISD::LOAD_TOC";
   case PPCISD::DYNALLOC:        return "PPCISD::DYNALLOC";
@@ -3431,11 +3430,12 @@ unsigned PrepareCall(SelectionDAG &DAG, SDValue &Callee, SDValue &InFlag,
   unsigned CallOpc = PPCISD::CALL;
 
   bool needIndirectCall = true;
-  if (SDNode *Dest = isBLACompatibleAddress(Callee, DAG)) {
-    // If this is an absolute destination address, use the munged value.
-    Callee = SDValue(Dest, 0);
-    needIndirectCall = false;
-  }
+  if (!isSVR4ABI || !isPPC64)
+    if (SDNode *Dest = isBLACompatibleAddress(Callee, DAG)) {
+      // If this is an absolute destination address, use the munged value.
+      Callee = SDValue(Dest, 0);
+      needIndirectCall = false;
+    }
 
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     // XXX Work around for http://llvm.org/bugs/show_bug.cgi?id=5201
@@ -3543,8 +3543,10 @@ unsigned PrepareCall(SelectionDAG &DAG, SDValue &Callee, SDValue &InFlag,
       // additional register being allocated and an unnecessary move instruction
       // being generated.
       VTs = DAG.getVTList(MVT::Other, MVT::Glue);
+      SDValue TOCOff = DAG.getIntPtrConstant(8);
+      SDValue AddTOC = DAG.getNode(ISD::ADD, dl, MVT::i64, Callee, TOCOff);
       SDValue LoadTOCPtr = DAG.getNode(PPCISD::LOAD_TOC, dl, VTs, Chain,
-                                       Callee, InFlag);
+                                       AddTOC, InFlag);
       Chain = LoadTOCPtr.getValue(0);
       InFlag = LoadTOCPtr.getValue(1);
 
@@ -3728,7 +3730,12 @@ PPCTargetLowering::FinishCall(CallingConv::ID CallConv, SDLoc dl,
 
   if (needsTOCRestore) {
     SDVTList VTs = DAG.getVTList(MVT::Other, MVT::Glue);
-    Chain = DAG.getNode(PPCISD::TOC_RESTORE, dl, VTs, Chain, InFlag);
+    EVT PtrVT = DAG.getTargetLoweringInfo().getPointerTy();
+    SDValue StackPtr = DAG.getRegister(PPC::X1, PtrVT);
+    unsigned TOCSaveOffset = PPCFrameLowering::getTOCSaveOffset();
+    SDValue TOCOff = DAG.getIntPtrConstant(TOCSaveOffset);
+    SDValue AddTOC = DAG.getNode(ISD::ADD, dl, MVT::i64, StackPtr, TOCOff);
+    Chain = DAG.getNode(PPCISD::LOAD_TOC, dl, VTs, Chain, AddTOC, InFlag);
     InFlag = Chain.getValue(1);
   }
 
@@ -4383,19 +4390,15 @@ PPCTargetLowering::LowerCall_64SVR4(SDValue Chain, SDValue Callee,
   // pointers in the 64-bit SVR4 ABI.
   if (!isTailCall &&
       !dyn_cast<GlobalAddressSDNode>(Callee) &&
-      !dyn_cast<ExternalSymbolSDNode>(Callee) &&
-      !isBLACompatibleAddress(Callee, DAG)) {
+      !dyn_cast<ExternalSymbolSDNode>(Callee)) {
     // Load r2 into a virtual register and store it to the TOC save area.
     SDValue Val = DAG.getCopyFromReg(Chain, dl, PPC::X2, MVT::i64);
     // TOC save area offset.
-    SDValue PtrOff = DAG.getIntPtrConstant(40);
+    unsigned TOCSaveOffset = PPCFrameLowering::getTOCSaveOffset();
+    SDValue PtrOff = DAG.getIntPtrConstant(TOCSaveOffset);
     SDValue AddPtr = DAG.getNode(ISD::ADD, dl, PtrVT, StackPtr, PtrOff);
     Chain = DAG.getStore(Val.getValue(1), dl, Val, AddPtr, MachinePointerInfo(),
                          false, false, 0);
-    // R12 must contain the address of an indirect callee.  This does not
-    // mean the MTCTR instruction must use R12; it's easier to model this
-    // as an extra parameter, so do that.
-    RegsToPass.push_back(std::make_pair((unsigned)PPC::X12, Callee));
   }
 
   // Build a sequence of copy-to-reg nodes chained together with token chain
