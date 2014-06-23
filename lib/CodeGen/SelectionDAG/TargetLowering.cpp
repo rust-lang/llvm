@@ -327,6 +327,10 @@ TargetLowering::TargetLoweringOpt::ShrinkDemandedOp(SDValue Op,
   assert(Op.getNode()->getNumValues() == 1 &&
          "ShrinkDemandedOp only supports nodes with one result!");
 
+  // Early return, as this function cannot handle vector types.
+  if (Op.getValueType().isVector())
+    return false;
+
   // Don't do this if the node has another user, which may require the
   // full value.
   if (!Op.getNode()->hasOneUse())
@@ -2613,7 +2617,8 @@ SDValue TargetLowering::BuildExactSDIV(SDValue Op1, SDValue Op2, SDLoc dl,
   if (ShAmt) {
     // TODO: For UDIV use SRL instead of SRA.
     SDValue Amt = DAG.getConstant(ShAmt, getShiftAmountTy(Op1.getValueType()));
-    Op1 = DAG.getNode(ISD::SRA, dl, Op1.getValueType(), Op1, Amt);
+    Op1 = DAG.getNode(ISD::SRA, dl, Op1.getValueType(), Op1, Amt, false, false,
+                      true);
     d = d.ashr(ShAmt);
   }
 

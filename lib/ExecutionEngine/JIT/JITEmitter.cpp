@@ -32,6 +32,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/IR/ValueMap.h"
 #include "llvm/Support/Debug.h"
@@ -120,21 +121,16 @@ namespace {
 #endif
     }
 
-    FunctionToLazyStubMapTy& getFunctionToLazyStubMap(
-      const MutexGuard& locked) {
-      assert(locked.holds(TheJIT->lock));
+    FunctionToLazyStubMapTy& getFunctionToLazyStubMap() {
       return FunctionToLazyStubMap;
     }
 
-    GlobalToIndirectSymMapTy& getGlobalToIndirectSymMap(const MutexGuard& lck) {
-      assert(lck.holds(TheJIT->lock));
+    GlobalToIndirectSymMapTy& getGlobalToIndirectSymMap() {
       return GlobalToIndirectSymMap;
     }
 
     std::pair<void *, Function *> LookupFunctionFromCallSite(
-        const MutexGuard &locked, void *CallSite) const {
-      assert(locked.holds(TheJIT->lock));
-
+        void *CallSite) const {
       // The address given to us for the stub may not be exactly right, it
       // might be a little bit after the stub.  As such, use upper_bound to
       // find it.
@@ -146,9 +142,7 @@ namespace {
       return *I;
     }
 
-    void AddCallSite(const MutexGuard &locked, void *CallSite, Function *F) {
-      assert(locked.holds(TheJIT->lock));
-
+    void AddCallSite(void *CallSite, Function *F) {
       bool Inserted = CallSiteToFunctionMap.insert(
           std::make_pair(CallSite, F)).second;
       (void)Inserted;
@@ -503,7 +497,7 @@ void *JITResolver::getLazyFunctionStubIfAvailable(Function *F) {
   MutexGuard locked(TheJIT->lock);
 
   // If we already have a stub for this function, recycle it.
-  return state.getFunctionToLazyStubMap(locked).lookup(F);
+  return state.getFunctionToLazyStubMap().lookup(F);
 }
 
 /// getFunctionStub - This returns a pointer to a function stub, creating
@@ -512,7 +506,7 @@ void *JITResolver::getLazyFunctionStub(Function *F) {
   MutexGuard locked(TheJIT->lock);
 
   // If we already have a lazy stub for this function, recycle it.
-  void *&Stub = state.getFunctionToLazyStubMap(locked)[F];
+  void *&Stub = state.getFunctionToLazyStubMap()[F];
   if (Stub) return Stub;
 
   // Call the lazy resolver function if we are JIT'ing lazily.  Otherwise we
@@ -554,7 +548,7 @@ void *JITResolver::getLazyFunctionStub(Function *F) {
 
     // Finally, keep track of the stub-to-Function mapping so that the
     // JITCompilerFn knows which function to compile!
-    state.AddCallSite(locked, Stub, F);
+    state.AddCallSite(Stub, F);
   } else if (!Actual) {
     // If we are JIT'ing non-lazily but need to call a function that does not
     // exist yet, add it to the JIT's work list so that we can fill in the
@@ -573,7 +567,7 @@ void *JITResolver::getGlobalValueIndirectSym(GlobalValue *GV, void *GVAddress) {
   MutexGuard locked(TheJIT->lock);
 
   // If we already have a stub for this global variable, recycle it.
-  void *&IndirectSym = state.getGlobalToIndirectSymMap(locked)[GV];
+  void *&IndirectSym = state.getGlobalToIndirectSymMap()[GV];
   if (IndirectSym) return IndirectSym;
 
   // Otherwise, codegen a new indirect symbol.
@@ -633,7 +627,7 @@ void *JITResolver::JITCompilerFn(void *Stub) {
     // The address given to us for the stub may not be exactly right, it might
     // be a little bit after the stub.  As such, use upper_bound to find it.
     std::pair<void*, Function*> I =
-      JR->state.LookupFunctionFromCallSite(locked, Stub);
+      JR->state.LookupFunctionFromCallSite(Stub);
     F = I.second;
     ActualPtr = I.first;
   }
@@ -684,13 +678,23 @@ void *JITResolver::JITCompilerFn(void *Stub) {
 //===----------------------------------------------------------------------===//
 // JITEmitter code.
 //
+
+static GlobalObject *getSimpleAliasee(Constant *C) {
+  C = C->stripPointerCasts();
+  return dyn_cast<GlobalObject>(C);
+}
+
 void *JITEmitter::getPointerToGlobal(GlobalValue *V, void *Reference,
                                      bool MayNeedFarStub) {
   if (GlobalVariable *GV = dyn_cast<GlobalVariable>(V))
     return TheJIT->getOrEmitGlobalVariable(GV);
 
-  if (GlobalAlias *GA = dyn_cast<GlobalAlias>(V))
-    return TheJIT->getPointerToGlobal(GA->getAliasee());
+  if (GlobalAlias *GA = dyn_cast<GlobalAlias>(V)) {
+    // We can only handle simple cases.
+    if (GlobalValue *GV = getSimpleAliasee(GA->getAliasee()))
+      return TheJIT->getPointerToGlobal(GV);
+    return nullptr;
+  }
 
   // If we have already compiled the function, return a pointer to its body.
   Function *F = cast<Function>(V);
@@ -1225,7 +1229,7 @@ void *JIT::getPointerToFunctionOrStub(Function *F) {
   return JE->getJITResolver().getLazyFunctionStub(F);
 }
 
-void JIT::updateFunctionStub(Function *F) {
+void JIT::updateFunctionStubUnlocked(Function *F) {
   // Get the empty stub we generated earlier.
   JITEmitter *JE = static_cast<JITEmitter*>(getCodeEmitter());
   void *Stub = JE->getJITResolver().getLazyFunctionStub(F);

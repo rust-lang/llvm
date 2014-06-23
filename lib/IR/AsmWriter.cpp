@@ -1451,10 +1451,11 @@ void AssemblyWriter::printGlobal(const GlobalVariable *GV) {
   PrintVisibility(GV->getVisibility(), Out);
   PrintDLLStorageClass(GV->getDLLStorageClass(), Out);
   PrintThreadLocalModel(GV->getThreadLocalMode(), Out);
+  if (GV->hasUnnamedAddr())
+    Out << "unnamed_addr ";
 
   if (unsigned AddressSpace = GV->getType()->getAddressSpace())
     Out << "addrspace(" << AddressSpace << ") ";
-  if (GV->hasUnnamedAddr()) Out << "unnamed_addr ";
   if (GV->isExternallyInitialized()) Out << "externally_initialized ";
   Out << (GV->isConstant() ? "constant " : "global ");
   TypePrinter.print(GV->getType()->getElementType(), Out);
@@ -1488,21 +1489,18 @@ void AssemblyWriter::printAlias(const GlobalAlias *GA) {
   }
   PrintVisibility(GA->getVisibility(), Out);
   PrintDLLStorageClass(GA->getDLLStorageClass(), Out);
+  PrintThreadLocalModel(GA->getThreadLocalMode(), Out);
+  if (GA->hasUnnamedAddr())
+    Out << "unnamed_addr ";
 
   Out << "alias ";
 
   PrintLinkage(GA->getLinkage(), Out);
 
-  PointerType *Ty = GA->getType();
   const Constant *Aliasee = GA->getAliasee();
-  if (!Aliasee || Ty != Aliasee->getType()) {
-    if (unsigned AddressSpace = Ty->getAddressSpace())
-      Out << "addrspace(" << AddressSpace << ") ";
-    TypePrinter.print(Ty->getElementType(), Out);
-    Out << ", ";
-  }
 
   if (!Aliasee) {
+    TypePrinter.print(GA->getType(), Out);
     Out << " <<NULL ALIASEE>>";
   } else {
     writeOperand(Aliasee, !isa<ConstantExpr>(Aliasee));
@@ -1787,6 +1785,9 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
   if ((isa<LoadInst>(I)  && cast<LoadInst>(I).isAtomic()) ||
       (isa<StoreInst>(I) && cast<StoreInst>(I).isAtomic()))
     Out << " atomic";
+
+  if (isa<AtomicCmpXchgInst>(I) && cast<AtomicCmpXchgInst>(I).isWeak())
+    Out << " weak";
 
   // If this is a volatile operation, print out the volatile marker.
   if ((isa<LoadInst>(I)  && cast<LoadInst>(I).isVolatile()) ||
@@ -2158,10 +2159,6 @@ void NamedMDNode::print(raw_ostream &ROS) const {
 }
 
 void Type::print(raw_ostream &OS) const {
-  if (!this) {
-    OS << "<null Type>";
-    return;
-  }
   TypePrinting TP;
   TP.print(const_cast<Type*>(this), OS);
 
@@ -2174,10 +2171,6 @@ void Type::print(raw_ostream &OS) const {
 }
 
 void Value::print(raw_ostream &ROS) const {
-  if (!this) {
-    ROS << "printing a <null> value\n";
-    return;
-  }
   formatted_raw_ostream OS(ROS);
   if (const Instruction *I = dyn_cast<Instruction>(this)) {
     const Function *F = I->getParent() ? I->getParent()->getParent() : nullptr;

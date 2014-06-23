@@ -141,9 +141,6 @@ def PPCload   : SDNode<"PPCISD::LOAD", SDTypeProfile<1, 1, []>,
 def PPCload_toc : SDNode<"PPCISD::LOAD_TOC", SDTypeProfile<0, 1, []>,
                           [SDNPHasChain, SDNPSideEffect,
                            SDNPInGlue, SDNPOutGlue]>;
-def PPCtoc_restore : SDNode<"PPCISD::TOC_RESTORE", SDTypeProfile<0, 0, []>,
-                            [SDNPHasChain, SDNPSideEffect,
-                             SDNPInGlue, SDNPOutGlue]>;
 def PPCmtctr      : SDNode<"PPCISD::MTCTR", SDT_PPCCall,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 def PPCbctrl : SDNode<"PPCISD::BCTRL", SDTNone,
@@ -610,10 +607,10 @@ def iaddroff : ComplexPattern<iPTR, 1, "SelectAddrImmOffs", [], []>;
 
 //===----------------------------------------------------------------------===//
 // PowerPC Instruction Predicate Definitions.
-def In32BitMode  : Predicate<"!PPCSubTarget.isPPC64()">;
-def In64BitMode  : Predicate<"PPCSubTarget.isPPC64()">;
-def IsBookE  : Predicate<"PPCSubTarget.isBookE()">;
-def IsNotBookE  : Predicate<"!PPCSubTarget.isBookE()">;
+def In32BitMode  : Predicate<"!PPCSubTarget->isPPC64()">;
+def In64BitMode  : Predicate<"PPCSubTarget->isPPC64()">;
+def IsBookE  : Predicate<"PPCSubTarget->isBookE()">;
+def IsNotBookE  : Predicate<"!PPCSubTarget->isBookE()">;
 
 //===----------------------------------------------------------------------===//
 // PowerPC Multiclass Definitions.

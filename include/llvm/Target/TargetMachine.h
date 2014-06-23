@@ -187,26 +187,26 @@ public:
 
   /// getAsmVerbosityDefault - Returns the default value of asm verbosity.
   ///
-  static bool getAsmVerbosityDefault();
+  bool getAsmVerbosityDefault() const ;
 
   /// setAsmVerbosityDefault - Set the default value of asm verbosity. Default
   /// is false.
-  static void setAsmVerbosityDefault(bool);
+  void setAsmVerbosityDefault(bool);
 
   /// getDataSections - Return true if data objects should be emitted into their
   /// own section, corresponds to -fdata-sections.
-  static bool getDataSections();
+  bool getDataSections() const;
 
   /// getFunctionSections - Return true if functions should be emitted into
   /// their own section, corresponding to -ffunction-sections.
-  static bool getFunctionSections();
+  bool getFunctionSections() const;
 
   /// setDataSections - Set if the data are emit into separate sections.
-  static void setDataSections(bool);
+  void setDataSections(bool);
 
   /// setFunctionSections - Set if the functions are emit into separate
   /// sections.
-  static void setFunctionSections(bool);
+  void setFunctionSections(bool);
 
   /// \brief Register analysis passes for this target with a pass manager.
   virtual void addAnalysisPasses(PassManagerBase &) {}

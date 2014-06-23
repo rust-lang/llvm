@@ -14,19 +14,20 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Config/config.h"
+#include "llvm/Support/Errc.h"
 #include "llvm/Support/Errno.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
-#include "llvm/Support/system_error.h"
 #include <cassert>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <new>
 #include <sys/types.h>
+#include <system_error>
 #if !defined(_MSC_VER) && !defined(__MINGW32__)
 #include <unistd.h>
 #else
@@ -156,9 +157,10 @@ MemoryBuffer *MemoryBuffer::getNewMemBuffer(size_t Size, StringRef BufferName) {
 /// if the Filename is "-".  If an error occurs, this returns null and fills
 /// in *ErrStr with a reason.  If stdin is empty, this API (unlike getSTDIN)
 /// returns an empty buffer.
-error_code MemoryBuffer::getFileOrSTDIN(StringRef Filename,
-                                        std::unique_ptr<MemoryBuffer> &Result,
-                                        int64_t FileSize) {
+std::error_code
+MemoryBuffer::getFileOrSTDIN(StringRef Filename,
+                             std::unique_ptr<MemoryBuffer> &Result,
+                             int64_t FileSize) {
   if (Filename == "-")
     return getSTDIN(Result);
   return getFile(Filename, Result, FileSize);
@@ -190,7 +192,7 @@ class MemoryBufferMMapFile : public MemoryBuffer {
 
 public:
   MemoryBufferMMapFile(bool RequiresNullTerminator, int FD, uint64_t Len,
-                       uint64_t Offset, error_code EC)
+                       uint64_t Offset, std::error_code EC)
       : MFR(FD, false, sys::fs::mapped_file_region::readonly,
             getLegalMapSize(Len, Offset), getLegalMapOffset(Offset), EC) {
     if (!EC) {
@@ -210,9 +212,9 @@ public:
 };
 }
 
-static error_code getMemoryBufferForStream(int FD,
-                                           StringRef BufferName,
-                                           std::unique_ptr<MemoryBuffer> &Result) {
+static std::error_code
+getMemoryBufferForStream(int FD, StringRef BufferName,
+                         std::unique_ptr<MemoryBuffer> &Result) {
   const ssize_t ChunkSize = 4096*4;
   SmallString<ChunkSize> Buffer;
   ssize_t ReadBytes;
@@ -222,26 +224,25 @@ static error_code getMemoryBufferForStream(int FD,
     ReadBytes = read(FD, Buffer.end(), ChunkSize);
     if (ReadBytes == -1) {
       if (errno == EINTR) continue;
-      return error_code(errno, posix_category());
+      return std::error_code(errno, std::generic_category());
     }
     Buffer.set_size(Buffer.size() + ReadBytes);
   } while (ReadBytes != 0);
 
   Result.reset(MemoryBuffer::getMemBufferCopy(Buffer, BufferName));
-  return error_code::success();
+  return std::error_code();
 }
 
-static error_code getFileAux(const char *Filename,
-                             std::unique_ptr<MemoryBuffer> &Result,
-                             int64_t FileSize,
-                             bool RequiresNullTerminator,
-                             bool IsVolatileSize);
+static std::error_code getFileAux(const char *Filename,
+                                  std::unique_ptr<MemoryBuffer> &Result,
+                                  int64_t FileSize, bool RequiresNullTerminator,
+                                  bool IsVolatileSize);
 
-error_code MemoryBuffer::getFile(Twine Filename,
-                                 std::unique_ptr<MemoryBuffer> &Result,
-                                 int64_t FileSize,
-                                 bool RequiresNullTerminator,
-                                 bool IsVolatileSize) {
+std::error_code MemoryBuffer::getFile(Twine Filename,
+                                      std::unique_ptr<MemoryBuffer> &Result,
+                                      int64_t FileSize,
+                                      bool RequiresNullTerminator,
+                                      bool IsVolatileSize) {
   // Ensure the path is null terminated.
   SmallString<256> PathBuf;
   StringRef NullTerminatedName = Filename.toNullTerminatedStringRef(PathBuf);
@@ -249,23 +250,25 @@ error_code MemoryBuffer::getFile(Twine Filename,
                     RequiresNullTerminator, IsVolatileSize);
 }
 
-static error_code getOpenFileImpl(int FD, const char *Filename,
-                                  std::unique_ptr<MemoryBuffer> &Result,
-                                  uint64_t FileSize, uint64_t MapSize,
-                                  int64_t Offset, bool RequiresNullTerminator,
-                                  bool IsVolatileSize);
+static std::error_code getOpenFileImpl(int FD, const char *Filename,
+                                       std::unique_ptr<MemoryBuffer> &Result,
+                                       uint64_t FileSize, uint64_t MapSize,
+                                       int64_t Offset,
+                                       bool RequiresNullTerminator,
+                                       bool IsVolatileSize);
 
-static error_code getFileAux(const char *Filename,
-                             std::unique_ptr<MemoryBuffer> &Result, int64_t FileSize,
-                             bool RequiresNullTerminator,
-                             bool IsVolatileSize) {
+static std::error_code getFileAux(const char *Filename,
+                                  std::unique_ptr<MemoryBuffer> &Result,
+                                  int64_t FileSize, bool RequiresNullTerminator,
+                                  bool IsVolatileSize) {
   int FD;
-  error_code EC = sys::fs::openFileForRead(Filename, FD);
+  std::error_code EC = sys::fs::openFileForRead(Filename, FD);
   if (EC)
     return EC;
 
-  error_code ret = getOpenFileImpl(FD, Filename, Result, FileSize, FileSize, 0,
-                                   RequiresNullTerminator, IsVolatileSize);
+  std::error_code ret =
+      getOpenFileImpl(FD, Filename, Result, FileSize, FileSize, 0,
+                      RequiresNullTerminator, IsVolatileSize);
   close(FD);
   return ret;
 }
@@ -318,11 +321,12 @@ static bool shouldUseMmap(int FD,
   return true;
 }
 
-static error_code getOpenFileImpl(int FD, const char *Filename,
-                                  std::unique_ptr<MemoryBuffer> &Result,
-                                  uint64_t FileSize, uint64_t MapSize,
-                                  int64_t Offset, bool RequiresNullTerminator,
-                                  bool IsVolatileSize) {
+static std::error_code getOpenFileImpl(int FD, const char *Filename,
+                                       std::unique_ptr<MemoryBuffer> &Result,
+                                       uint64_t FileSize, uint64_t MapSize,
+                                       int64_t Offset,
+                                       bool RequiresNullTerminator,
+                                       bool IsVolatileSize) {
   static int PageSize = sys::process::get_self()->page_size();
 
   // Default is to map the full file.
@@ -331,7 +335,7 @@ static error_code getOpenFileImpl(int FD, const char *Filename,
     // file descriptor is cheaper than stat on a random path.
     if (FileSize == uint64_t(-1)) {
       sys::fs::file_status Status;
-      error_code EC = sys::fs::status(FD, Status);
+      std::error_code EC = sys::fs::status(FD, Status);
       if (EC)
         return EC;
 
@@ -350,11 +354,11 @@ static error_code getOpenFileImpl(int FD, const char *Filename,
 
   if (shouldUseMmap(FD, FileSize, MapSize, Offset, RequiresNullTerminator,
                     PageSize, IsVolatileSize)) {
-    error_code EC;
+    std::error_code EC;
     Result.reset(new (NamedBufferAlloc(Filename)) MemoryBufferMMapFile(
         RequiresNullTerminator, FD, MapSize, Offset, EC));
     if (!EC)
-      return error_code::success();
+      return std::error_code();
   }
 
   MemoryBuffer *Buf = MemoryBuffer::getNewUninitMemBuffer(MapSize, Filename);
@@ -370,7 +374,7 @@ static error_code getOpenFileImpl(int FD, const char *Filename,
   size_t BytesLeft = MapSize;
 #ifndef HAVE_PREAD
   if (lseek(FD, Offset, SEEK_SET) == -1)
-    return error_code(errno, posix_category());
+    return std::error_code(errno, std::generic_category());
 #endif
 
   while (BytesLeft) {
@@ -383,7 +387,7 @@ static error_code getOpenFileImpl(int FD, const char *Filename,
       if (errno == EINTR)
         continue;
       // Error while reading.
-      return error_code(errno, posix_category());
+      return std::error_code(errno, std::generic_category());
     }
     if (NumRead == 0) {
       memset(BufPtr, 0, BytesLeft); // zero-initialize rest of the buffer.
@@ -394,22 +398,21 @@ static error_code getOpenFileImpl(int FD, const char *Filename,
   }
 
   Result.swap(SB);
-  return error_code::success();
+  return std::error_code();
 }
 
-error_code MemoryBuffer::getOpenFile(int FD, const char *Filename,
-                                     std::unique_ptr<MemoryBuffer> &Result,
-                                     uint64_t FileSize,
-                                     bool RequiresNullTerminator,
-                                     bool IsVolatileSize) {
+std::error_code MemoryBuffer::getOpenFile(int FD, const char *Filename,
+                                          std::unique_ptr<MemoryBuffer> &Result,
+                                          uint64_t FileSize,
+                                          bool RequiresNullTerminator,
+                                          bool IsVolatileSize) {
   return getOpenFileImpl(FD, Filename, Result, FileSize, FileSize, 0,
                          RequiresNullTerminator, IsVolatileSize);
 }
 
-error_code MemoryBuffer::getOpenFileSlice(int FD, const char *Filename,
-                                          std::unique_ptr<MemoryBuffer> &Result,
-                                          uint64_t MapSize, int64_t Offset,
-                                          bool IsVolatileSize) {
+std::error_code MemoryBuffer::getOpenFileSlice(
+    int FD, const char *Filename, std::unique_ptr<MemoryBuffer> &Result,
+    uint64_t MapSize, int64_t Offset, bool IsVolatileSize) {
   return getOpenFileImpl(FD, Filename, Result, -1, MapSize, Offset, false,
                          IsVolatileSize);
 }
@@ -418,7 +421,7 @@ error_code MemoryBuffer::getOpenFileSlice(int FD, const char *Filename,
 // MemoryBuffer::getSTDIN implementation.
 //===----------------------------------------------------------------------===//
 
-error_code MemoryBuffer::getSTDIN(std::unique_ptr<MemoryBuffer> &Result) {
+std::error_code MemoryBuffer::getSTDIN(std::unique_ptr<MemoryBuffer> &Result) {
   // Read in all of the data from stdin, we cannot mmap stdin.
   //
   // FIXME: That isn't necessarily true, we should try to mmap stdin and

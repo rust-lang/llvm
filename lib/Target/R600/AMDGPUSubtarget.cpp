@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUSubtarget.h"
+#include "R600InstrInfo.h"
+#include "SIInstrInfo.h"
 
 using namespace llvm;
 
@@ -39,8 +41,15 @@ AMDGPUSubtarget::AMDGPUSubtarget(StringRef TT, StringRef CPU, StringRef FS) :
   EnableIfCvt = true;
   WavefrontSize = 0;
   CFALUBug = false;
+  LocalMemorySize = 0;
   ParseSubtargetFeatures(GPU, FS);
   DevName = GPU;
+
+  if (getGeneration() <= AMDGPUSubtarget::NORTHERN_ISLANDS) {
+    InstrInfo.reset(new R600InstrInfo(*this));
+  } else {
+    InstrInfo.reset(new SIInstrInfo(*this));
+  }
 }
 
 bool
@@ -100,6 +109,10 @@ bool
 AMDGPUSubtarget::hasCFAluBug() const {
   assert(getGeneration() <= NORTHERN_ISLANDS);
   return CFALUBug;
+}
+int
+AMDGPUSubtarget::getLocalMemorySize() const {
+  return LocalMemorySize;
 }
 bool
 AMDGPUSubtarget::isTargetELF() const {

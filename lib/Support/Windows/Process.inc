@@ -12,6 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/WindowsError.h"
 #include <malloc.h>
 
 // The Windows.h header must be after LLVM and standard headers.
@@ -46,7 +48,6 @@
 
 using namespace llvm;
 using namespace sys;
-
 
 process::id_type self_process::get_id() {
   return GetCurrentProcessId();
@@ -178,12 +179,16 @@ Optional<std::string> Process::GetEnv(StringRef Name) {
   return std::string(Res.data());
 }
 
-error_code
+static std::error_code windows_error(DWORD E) {
+  return mapWindowsError(E);
+}
+
+std::error_code
 Process::GetArgumentVector(SmallVectorImpl<const char *> &Args,
                            ArrayRef<const char *>,
                            SpecificBumpPtrAllocator<char> &ArgAllocator) {
   int NewArgCount;
-  error_code ec;
+  std::error_code ec;
 
   wchar_t **UnicodeCommandLine = CommandLineToArgvW(GetCommandLineW(),
                                                     &NewArgCount);
@@ -208,7 +213,7 @@ Process::GetArgumentVector(SmallVectorImpl<const char *> &Args,
   if (ec)
     return ec;
 
-  return error_code::success();
+  return std::error_code();
 }
 
 bool Process::StandardInIsUserInput() {
@@ -363,12 +368,12 @@ unsigned Process::GetRandomNumber() {
   HCRYPTPROV HCPC;
   if (!::CryptAcquireContextW(&HCPC, NULL, NULL, PROV_RSA_FULL,
                               CRYPT_VERIFYCONTEXT))
-    assert(false && "Could not acquire a cryptographic context");
+    report_fatal_error("Could not acquire a cryptographic context");
 
   ScopedCryptContext CryptoProvider(HCPC);
   unsigned Ret;
   if (!::CryptGenRandom(CryptoProvider, sizeof(Ret),
                         reinterpret_cast<BYTE *>(&Ret)))
-    assert(false && "Could not generate a random number");
+    report_fatal_error("Could not generate a random number");
   return Ret;
 }

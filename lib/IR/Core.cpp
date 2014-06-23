@@ -17,9 +17,9 @@
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
-#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IRBuilder.h"
@@ -35,10 +35,10 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Threading.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/system_error.h"
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <system_error>
 
 using namespace llvm;
 
@@ -281,6 +281,7 @@ char *LLVMPrintTypeToString(LLVMTypeRef Ty) {
   std::string buf;
   raw_string_ostream os(buf);
 
+  assert(unwrap(Ty) != nullptr && "Expecting non-null Type");
   unwrap(Ty)->print(os);
   os.flush();
 
@@ -531,6 +532,7 @@ char* LLVMPrintValueToString(LLVMValueRef Val) {
   std::string buf;
   raw_string_ostream os(buf);
 
+  assert(unwrap(Val) != nullptr && "Expecting non-null Value");
   unwrap(Val)->print(os);
   os.flush();
 
@@ -1286,7 +1288,7 @@ void LLVMSetLinkage(LLVMValueRef Global, LLVMLinkage Linkage) {
 }
 
 const char *LLVMGetSection(LLVMValueRef Global) {
-  return unwrap<GlobalValue>(Global)->getSection().c_str();
+  return unwrap<GlobalValue>(Global)->getSection();
 }
 
 void LLVMSetSection(LLVMValueRef Global, const char *Section) {
@@ -2599,7 +2601,7 @@ LLVMBool LLVMCreateMemoryBufferWithContentsOfFile(
     char **OutMessage) {
 
   std::unique_ptr<MemoryBuffer> MB;
-  error_code ec;
+  std::error_code ec;
   if (!(ec = MemoryBuffer::getFile(Path, MB))) {
     *OutMemBuf = wrap(MB.release());
     return 0;
@@ -2612,7 +2614,7 @@ LLVMBool LLVMCreateMemoryBufferWithContentsOfFile(
 LLVMBool LLVMCreateMemoryBufferWithSTDIN(LLVMMemoryBufferRef *OutMemBuf,
                                          char **OutMessage) {
   std::unique_ptr<MemoryBuffer> MB;
-  error_code ec;
+  std::error_code ec;
   if (!(ec = MemoryBuffer::getSTDIN(MB))) {
     *OutMemBuf = wrap(MB.release());
     return 0;

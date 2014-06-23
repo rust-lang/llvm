@@ -14,8 +14,10 @@
 #ifndef ARMSUBTARGET_H
 #define ARMSUBTARGET_H
 
+#include "ARMSelectionDAGInfo.h"
 #include "MCTargetDesc/ARMMCTargetDesc.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include <string>
@@ -247,7 +249,18 @@ protected:
 
   /// \brief Reset the features for the ARM target.
   void resetSubtargetFeatures(const MachineFunction *MF) override;
+
+  /// initializeSubtargetDependencies - Initializes using a CPU and feature string
+  /// so that we can use initializer lists for subtarget initialization.
+  ARMSubtarget &initializeSubtargetDependencies(StringRef CPU, StringRef FS);
+
+  const DataLayout *getDataLayout() const { return &DL; }
+  const ARMSelectionDAGInfo *getSelectionDAGInfo() const { return &TSInfo; }
+
 private:
+  const DataLayout DL;
+  ARMSelectionDAGInfo TSInfo;
+
   void initializeEnvironment();
   void resetSubtargetFeatures(StringRef CPU, StringRef FS);
 public:
@@ -379,7 +392,12 @@ public:
 
   bool isR9Reserved() const { return IsR9Reserved; }
 
-  bool useMovt() const { return UseMovt && !isMinSize(); }
+  bool useMovt() const {
+    // NOTE Windows on ARM needs to use mov.w/mov.t pairs to materialise 32-bit
+    // immediates as it is inherently position independent, and may be out of
+    // range otherwise.
+    return UseMovt && (isTargetWindows() || !isMinSize());
+  }
   bool supportsTailCall() const { return SupportsTailCall; }
 
   bool allowsUnalignedMem() const { return AllowsUnalignedMem; }
@@ -395,6 +413,9 @@ public:
   /// This function returns true if the target has sincos() routine in its
   /// compiler runtime or math libraries.
   bool hasSinCos() const;
+
+  /// True for some subtargets at > -O0.
+  bool enablePostMachineScheduler() const;
 
   /// enablePostRAScheduler - True at 'More' optimization.
   bool enablePostRAScheduler(CodeGenOpt::Level OptLevel,

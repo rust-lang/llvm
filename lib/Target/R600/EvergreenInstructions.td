@@ -75,6 +75,8 @@ def COS_eg : COS_Common<0x8E>;
 def : POW_Common <LOG_IEEE_eg, EXP_IEEE_eg, MUL>;
 def : Pat<(fsqrt f32:$src), (MUL $src, (RECIPSQRT_CLAMPED_eg $src))>;
 
+defm : Expand24IBitOps<MULLO_INT_eg, ADD_INT>;
+
 //===----------------------------------------------------------------------===//
 // Memory read/write instructions
 //===----------------------------------------------------------------------===//
@@ -293,7 +295,7 @@ def : Pat<(i32 (sext_inreg i32:$src, i8)),
 def : Pat<(i32 (sext_inreg i32:$src, i16)),
   (BFE_INT_eg i32:$src, (i32 ZERO), (MOV_IMM_I32 16))>;
 
-defm : BFIPatterns <BFI_INT_eg>;
+defm : BFIPatterns <BFI_INT_eg, MOV_IMM_I32>;
 
 def BFM_INT_eg : R600_2OP <0xA0, "BFM_INT",
   [(set i32:$dst, (AMDGPUbfm i32:$src0, i32:$src1))],
@@ -301,8 +303,11 @@ def BFM_INT_eg : R600_2OP <0xA0, "BFM_INT",
 >;
 
 def MULADD_UINT24_eg : R600_3OP <0x10, "MULADD_UINT24",
-  [(set i32:$dst, (add (AMDGPUmul_u24 i32:$src0, i32:$src1), i32:$src2))], VecALU
+  [(set i32:$dst, (AMDGPUmad_u24 i32:$src0, i32:$src1, i32:$src2))], VecALU
 >;
+
+def : UMad24Pat<MULADD_UINT24_eg>;
+
 def BIT_ALIGN_INT_eg : R600_3OP <0xC, "BIT_ALIGN_INT", [], VecALU>;
 def : ROTRPattern <BIT_ALIGN_INT_eg>;
 def MULADD_eg : MULADD_Common<0x14>;
@@ -320,6 +325,8 @@ def MUL_UINT24_eg : R600_2OP <0xB5, "MUL_UINT24",
 >;
 def DOT4_eg : DOT4_Common<0xBE>;
 defm CUBE_eg : CUBE_Common<0xC0>;
+
+def BCNT_INT : R600_1OP_Helper <0xAA, "BCNT_INT", ctpop, VecALU>;
 
 let hasSideEffects = 1 in {
   def MOVA_INT_eg : R600_1OP <0xCC, "MOVA_INT", [], VecALU>;
@@ -341,7 +348,7 @@ def FLT_TO_UINT_eg : FLT_TO_UINT_Common<0x9A> {
 def UINT_TO_FLT_eg : UINT_TO_FLT_Common<0x9C>;
 
 def GROUP_BARRIER : InstR600 <
-    (outs), (ins), "  GROUP_BARRIER", [(int_AMDGPU_barrier_local)], AnyALU>,
+    (outs), (ins), "  GROUP_BARRIER", [(int_AMDGPU_barrier_local), (int_AMDGPU_barrier_global)], AnyALU>,
     R600ALU_Word0,
     R600ALU_Word1_OP2 <0x54> {
 
@@ -369,6 +376,11 @@ def GROUP_BARRIER : InstR600 <
 
   let ALUInst = 1;
 }
+
+def : Pat <
+	(int_AMDGPU_barrier_global),
+	(GROUP_BARRIER)
+>;
 
 //===----------------------------------------------------------------------===//
 // LDS Instructions

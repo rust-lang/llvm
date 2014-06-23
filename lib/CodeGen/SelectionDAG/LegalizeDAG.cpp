@@ -2650,12 +2650,15 @@ SDValue SelectionDAGLegalize::PromoteLegalFP_TO_INT(SDValue LegalOp,
     NewOutTy = (MVT::SimpleValueType)(NewOutTy.getSimpleVT().SimpleTy+1);
     assert(NewOutTy.isInteger() && "Ran out of possibilities!");
 
+    // A larger signed type can hold all unsigned values of the requested type,
+    // so using FP_TO_SINT is valid
     if (TLI.isOperationLegalOrCustom(ISD::FP_TO_SINT, NewOutTy)) {
       OpToUse = ISD::FP_TO_SINT;
       break;
     }
 
-    if (TLI.isOperationLegalOrCustom(ISD::FP_TO_UINT, NewOutTy)) {
+    // However, if the value may be < 0.0, we *must* use some FP_TO_SINT.
+    if (!isSigned && TLI.isOperationLegalOrCustom(ISD::FP_TO_UINT, NewOutTy)) {
       OpToUse = ISD::FP_TO_UINT;
       break;
     }
@@ -3007,14 +3010,14 @@ void SelectionDAGLegalize::ExpandNode(SDNode *Node) {
   case ISD::ATOMIC_LOAD: {
     // There is no libcall for atomic load; fake it with ATOMIC_CMP_SWAP.
     SDValue Zero = DAG.getConstant(0, Node->getValueType(0));
-    SDValue Swap = DAG.getAtomic(ISD::ATOMIC_CMP_SWAP, dl,
-                                 cast<AtomicSDNode>(Node)->getMemoryVT(),
-                                 Node->getOperand(0),
-                                 Node->getOperand(1), Zero, Zero,
-                                 cast<AtomicSDNode>(Node)->getMemOperand(),
-                                 cast<AtomicSDNode>(Node)->getOrdering(),
-                                 cast<AtomicSDNode>(Node)->getOrdering(),
-                                 cast<AtomicSDNode>(Node)->getSynchScope());
+    SDVTList VTs = DAG.getVTList(Node->getValueType(0), MVT::Other);
+    SDValue Swap = DAG.getAtomicCmpSwap(
+        ISD::ATOMIC_CMP_SWAP, dl, cast<AtomicSDNode>(Node)->getMemoryVT(), VTs,
+        Node->getOperand(0), Node->getOperand(1), Zero, Zero,
+        cast<AtomicSDNode>(Node)->getMemOperand(),
+        cast<AtomicSDNode>(Node)->getOrdering(),
+        cast<AtomicSDNode>(Node)->getOrdering(),
+        cast<AtomicSDNode>(Node)->getSynchScope());
     Results.push_back(Swap.getValue(0));
     Results.push_back(Swap.getValue(1));
     break;
@@ -3049,6 +3052,27 @@ void SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     std::pair<SDValue, SDValue> Tmp = ExpandAtomic(Node);
     Results.push_back(Tmp.first);
     Results.push_back(Tmp.second);
+    break;
+  }
+  case ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS: {
+    // Expanding an ATOMIC_CMP_SWAP_WITH_SUCCESS produces an ATOMIC_CMP_SWAP and
+    // splits out the success value as a comparison. Expanding the resulting
+    // ATOMIC_CMP_SWAP will produce a libcall.
+    SDVTList VTs = DAG.getVTList(Node->getValueType(0), MVT::Other);
+    SDValue Res = DAG.getAtomicCmpSwap(
+        ISD::ATOMIC_CMP_SWAP, dl, cast<AtomicSDNode>(Node)->getMemoryVT(), VTs,
+        Node->getOperand(0), Node->getOperand(1), Node->getOperand(2),
+        Node->getOperand(3), cast<MemSDNode>(Node)->getMemOperand(),
+        cast<AtomicSDNode>(Node)->getSuccessOrdering(),
+        cast<AtomicSDNode>(Node)->getFailureOrdering(),
+        cast<AtomicSDNode>(Node)->getSynchScope());
+
+    SDValue Success = DAG.getSetCC(SDLoc(Node), Node->getValueType(1),
+                                   Res, Node->getOperand(2), ISD::SETEQ);
+
+    Results.push_back(Res.getValue(0));
+    Results.push_back(Success);
+    Results.push_back(Res.getValue(1));
     break;
   }
   case ISD::DYNAMIC_STACKALLOC:
@@ -3128,6 +3152,65 @@ void SelectionDAGLegalize::ExpandNode(SDNode *Node) {
                                 Node->getOperand(0), Node->getValueType(0), dl);
     Results.push_back(Tmp1);
     break;
+  case ISD::FP_TO_SINT: {
+    EVT VT = Node->getOperand(0).getValueType();
+    EVT NVT = Node->getValueType(0);
+
+    // FIXME: Only f32 to i64 conversions are supported.
+    if (VT != MVT::f32 || NVT != MVT::i64)
+      break;
+
+    // Expand f32 -> i64 conversion
+    // This algorithm comes from compiler-rt's implementation of fixsfdi:
+    // https://github.com/llvm-mirror/compiler-rt/blob/master/lib/builtins/fixsfdi.c
+    EVT IntVT = EVT::getIntegerVT(*DAG.getContext(),
+                                  VT.getSizeInBits());
+    SDValue ExponentMask = DAG.getConstant(0x7F800000, IntVT);
+    SDValue ExponentLoBit = DAG.getConstant(23, IntVT);
+    SDValue Bias = DAG.getConstant(127, IntVT);
+    SDValue SignMask = DAG.getConstant(APInt::getSignBit(VT.getSizeInBits()),
+                                       IntVT);
+    SDValue SignLowBit = DAG.getConstant(VT.getSizeInBits() - 1, IntVT);
+    SDValue MantissaMask = DAG.getConstant(0x007FFFFF, IntVT);
+
+    SDValue Bits = DAG.getNode(ISD::BITCAST, dl, IntVT, Node->getOperand(0));
+
+    SDValue ExponentBits = DAG.getNode(ISD::SRL, dl, IntVT,
+        DAG.getNode(ISD::AND, dl, IntVT, Bits, ExponentMask),
+        DAG.getZExtOrTrunc(ExponentLoBit, dl, TLI.getShiftAmountTy(IntVT)));
+    SDValue Exponent = DAG.getNode(ISD::SUB, dl, IntVT, ExponentBits, Bias);
+
+    SDValue Sign = DAG.getNode(ISD::SRA, dl, IntVT,
+        DAG.getNode(ISD::AND, dl, IntVT, Bits, SignMask),
+        DAG.getZExtOrTrunc(SignLowBit, dl, TLI.getShiftAmountTy(IntVT)));
+    Sign = DAG.getSExtOrTrunc(Sign, dl, NVT);
+
+    SDValue R = DAG.getNode(ISD::OR, dl, IntVT,
+        DAG.getNode(ISD::AND, dl, IntVT, Bits, MantissaMask),
+        DAG.getConstant(0x00800000, IntVT));
+
+    R = DAG.getZExtOrTrunc(R, dl, NVT);
+
+
+    R = DAG.getSelectCC(dl, Exponent, ExponentLoBit,
+       DAG.getNode(ISD::SHL, dl, NVT, R,
+                   DAG.getZExtOrTrunc(
+                      DAG.getNode(ISD::SUB, dl, IntVT, Exponent, ExponentLoBit),
+                      dl, TLI.getShiftAmountTy(IntVT))),
+       DAG.getNode(ISD::SRL, dl, NVT, R,
+                   DAG.getZExtOrTrunc(
+                      DAG.getNode(ISD::SUB, dl, IntVT, ExponentLoBit, Exponent),
+                      dl, TLI.getShiftAmountTy(IntVT))),
+       ISD::SETGT);
+
+    SDValue Ret = DAG.getNode(ISD::SUB, dl, NVT,
+        DAG.getNode(ISD::XOR, dl, NVT, R, Sign),
+        Sign);
+
+    Results.push_back(DAG.getSelectCC(dl, Exponent, DAG.getConstant(0, IntVT),
+        DAG.getConstant(0, NVT), Ret, ISD::SETLT));
+    break;
+  }
   case ISD::FP_TO_UINT: {
     SDValue True, False;
     EVT VT =  Node->getOperand(0).getValueType();
@@ -3653,7 +3736,8 @@ void SelectionDAGLegalize::ExpandNode(SDNode *Node) {
                               ISD::ADD : ISD::SUB, dl, LHS.getValueType(),
                               LHS, RHS);
     Results.push_back(Sum);
-    EVT OType = Node->getValueType(1);
+    EVT ResultType = Node->getValueType(1);
+    EVT OType = getSetCCResultType(Node->getValueType(0));
 
     SDValue Zero = DAG.getConstant(0, LHS.getValueType());
 
@@ -3676,7 +3760,7 @@ void SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     SDValue SumSignNE = DAG.getSetCC(dl, OType, LHSSign, SumSign, ISD::SETNE);
 
     SDValue Cmp = DAG.getNode(ISD::AND, dl, OType, SignsMatch, SumSignNE);
-    Results.push_back(Cmp);
+    Results.push_back(DAG.getBoolExtOrTrunc(Cmp, dl, ResultType));
     break;
   }
   case ISD::UADDO:
@@ -3687,9 +3771,14 @@ void SelectionDAGLegalize::ExpandNode(SDNode *Node) {
                               ISD::ADD : ISD::SUB, dl, LHS.getValueType(),
                               LHS, RHS);
     Results.push_back(Sum);
-    Results.push_back(DAG.getSetCC(dl, Node->getValueType(1), Sum, LHS,
-                                   Node->getOpcode () == ISD::UADDO ?
-                                   ISD::SETULT : ISD::SETUGT));
+
+    EVT ResultType = Node->getValueType(1);
+    EVT SetCCType = getSetCCResultType(Node->getValueType(0));
+    ISD::CondCode CC
+      = Node->getOpcode() == ISD::UADDO ? ISD::SETULT : ISD::SETUGT;
+    SDValue SetCC = DAG.getSetCC(dl, SetCCType, Sum, LHS, CC);
+
+    Results.push_back(DAG.getBoolExtOrTrunc(SetCC, dl, ResultType));
     break;
   }
   case ISD::UMULO:
@@ -3899,13 +3988,29 @@ void SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     Tmp2 = Node->getOperand(1);   // RHS
     Tmp3 = Node->getOperand(2);   // True
     Tmp4 = Node->getOperand(3);   // False
+    EVT VT = Node->getValueType(0);
     SDValue CC = Node->getOperand(4);
+    ISD::CondCode CCOp = cast<CondCodeSDNode>(CC)->get();
 
+    if (TLI.isCondCodeLegal(CCOp, Tmp1.getSimpleValueType())) {
+      // If the condition code is legal, then we need to expand this
+      // node using SETCC and SELECT.
+      EVT CmpVT = Tmp1.getValueType();
+      assert(!TLI.isOperationExpand(ISD::SELECT, VT) &&
+             "Cannot expand ISD::SELECT_CC when ISD::SELECT also needs to be "
+             "expanded.");
+      EVT CCVT = TLI.getSetCCResultType(*DAG.getContext(), CmpVT);
+      SDValue Cond = DAG.getNode(ISD::SETCC, dl, CCVT, Tmp1, Tmp2, CC);
+      Results.push_back(DAG.getSelect(dl, VT, Cond, Tmp3, Tmp4));
+      break;
+    }
+
+    // SELECT_CC is legal, so the condition code must not be.
     bool Legalized = false;
     // Try to legalize by inverting the condition.  This is for targets that
     // might support an ordered version of a condition, but not the unordered
     // version (or vice versa).
-    ISD::CondCode InvCC = ISD::getSetCCInverse(cast<CondCodeSDNode>(CC)->get(),
+    ISD::CondCode InvCC = ISD::getSetCCInverse(CCOp,
                                                Tmp1.getValueType().isInteger());
     if (TLI.isCondCodeLegal(InvCC, Tmp1.getSimpleValueType())) {
       // Use the new condition code and swap true and false

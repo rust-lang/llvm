@@ -20,10 +20,11 @@
 using namespace llvm;
 using namespace object;
 
-IRObjectFile::IRObjectFile(MemoryBuffer *Object, error_code &EC,
+IRObjectFile::IRObjectFile(MemoryBuffer *Object, std::error_code &EC,
                            LLVMContext &Context, bool BufferOwned)
     : SymbolicFile(Binary::ID_IR, Object, BufferOwned) {
-  ErrorOr<Module*> MOrErr = parseBitcodeFile(Object, Context);
+  ErrorOr<Module *> MOrErr =
+      getLazyBitcodeModule(Object, Context, /*BufferOwned*/ false);
   if ((EC = MOrErr.getError()))
     return;
 
@@ -92,8 +93,8 @@ void IRObjectFile::moveSymbolNext(DataRefImpl &Symb) const {
   Symb.p = Res;
 }
 
-error_code IRObjectFile::printSymbolName(raw_ostream &OS,
-                                         DataRefImpl Symb) const {
+std::error_code IRObjectFile::printSymbolName(raw_ostream &OS,
+                                              DataRefImpl Symb) const {
   const GlobalValue &GV = getGV(Symb);
 
   if (Mang)
@@ -104,11 +105,21 @@ error_code IRObjectFile::printSymbolName(raw_ostream &OS,
   return object_error::success;
 }
 
+static bool isDeclaration(const GlobalValue &V) {
+  if (V.hasAvailableExternallyLinkage())
+    return true;
+
+  if (V.isMaterializable())
+    return false;
+
+  return V.isDeclaration();
+}
+
 uint32_t IRObjectFile::getSymbolFlags(DataRefImpl Symb) const {
   const GlobalValue &GV = getGV(Symb);
 
   uint32_t Res = BasicSymbolRef::SF_None;
-  if (GV.isDeclaration() || GV.hasAvailableExternallyLinkage())
+  if (isDeclaration(GV))
     Res |= BasicSymbolRef::SF_Undefined;
   if (GV.hasPrivateLinkage())
     Res |= BasicSymbolRef::SF_FormatSpecific;
@@ -142,7 +153,7 @@ basic_symbol_iterator IRObjectFile::symbol_end_impl() const {
 
 ErrorOr<SymbolicFile *> llvm::object::SymbolicFile::createIRObjectFile(
     MemoryBuffer *Object, LLVMContext &Context, bool BufferOwned) {
-  error_code EC;
+  std::error_code EC;
   std::unique_ptr<IRObjectFile> Ret(
       new IRObjectFile(Object, EC, Context, BufferOwned));
   if (EC)

@@ -19,6 +19,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/DataExtractor.h"
+#include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -28,7 +29,7 @@
 namespace llvm {
 namespace symbolize {
 
-static bool error(error_code ec) {
+static bool error(std::error_code ec) {
   if (!ec)
     return false;
   errs() << "LLVMSymbolizer: error reading file: " << ec.message() << ".\n";
@@ -310,7 +311,7 @@ LLVMSymbolizer::getOrCreateBinary(const std::string &Path) {
       const std::string &ResourcePath =
           getDarwinDWARFResourceForPath(Path);
       BinaryOrErr = createBinary(ResourcePath);
-      error_code EC = BinaryOrErr.getError();
+      std::error_code EC = BinaryOrErr.getError();
       if (EC != errc::no_such_file_or_directory && !error(EC)) {
         DbgBin = BinaryOrErr.get();
         ParsedBinariesAndObjects.push_back(std::unique_ptr<Binary>(DbgBin));

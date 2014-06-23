@@ -38,13 +38,12 @@ using namespace llvm;
 
 static inline Type *checkType(Type *Ty) {
   assert(Ty && "Value defined with a null type: Error!");
-  return const_cast<Type*>(Ty);
+  return Ty;
 }
 
 Value::Value(Type *ty, unsigned scid)
-  : SubclassID(scid), HasValueHandle(0),
-    SubclassOptionalData(0), SubclassData(0), VTy((Type*)checkType(ty)),
-    UseList(nullptr), Name(nullptr) {
+    : VTy(checkType(ty)), UseList(nullptr), Name(nullptr), SubclassID(scid),
+      HasValueHandle(0), SubclassOptionalData(0), SubclassData(0) {
   // FIXME: Why isn't this in the subclass gunk??
   // Note, we cannot call isa<CallInst> before the CallInst has been
   // constructed.
@@ -214,7 +213,7 @@ void Value::setName(const Twine &NewName) {
     // then reallocated.
 
     // Create the new name.
-    Name = ValueName::Create(NameRef.begin(), NameRef.end());
+    Name = ValueName::Create(NameRef);
     Name->setValue(this);
     return;
   }
@@ -301,27 +300,6 @@ void Value::takeName(Value *V) {
     ST->reinsertValue(this);
 }
 
-static GlobalObject &findReplacementForAliasUse(Value &C) {
-  if (auto *GO = dyn_cast<GlobalObject>(&C))
-    return *GO;
-  if (auto *GA = dyn_cast<GlobalAlias>(&C))
-    return *GA->getAliasee();
-  auto *CE = cast<ConstantExpr>(&C);
-  assert(CE->getOpcode() == Instruction::BitCast ||
-         CE->getOpcode() == Instruction::GetElementPtr ||
-         CE->getOpcode() == Instruction::AddrSpaceCast);
-  if (CE->getOpcode() == Instruction::GetElementPtr)
-    assert(cast<GEPOperator>(CE)->hasAllZeroIndices());
-  return findReplacementForAliasUse(*CE->getOperand(0));
-}
-
-static void replaceAliasUseWith(Use &U, Value *New) {
-  GlobalObject &Replacement = findReplacementForAliasUse(*New);
-  assert(&cast<GlobalObject>(*U) != &Replacement &&
-         "replaceAliasUseWith cannot form an alias cycle");
-  U.set(&Replacement);
-}
-
 #ifndef NDEBUG
 static bool contains(SmallPtrSet<ConstantExpr *, 4> &Cache, ConstantExpr *Expr,
                      Constant *C) {
@@ -373,10 +351,6 @@ void Value::replaceAllUsesWith(Value *New) {
     // Must handle Constants specially, we cannot call replaceUsesOfWith on a
     // constant because they are uniqued.
     if (auto *C = dyn_cast<Constant>(U.getUser())) {
-      if (isa<GlobalAlias>(C)) {
-        replaceAliasUseWith(U, New);
-        continue;
-      }
       if (!isa<GlobalValue>(C)) {
         C->replaceUsesOfWithOnConstant(this, New, &U);
         continue;

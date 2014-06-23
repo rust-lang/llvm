@@ -34,6 +34,8 @@ def AMDGPUfmax : SDNode<"AMDGPUISD::FMAX", SDTFPBinOp,
   [SDNPCommutative, SDNPAssociative]
 >;
 
+def AMDGPUclamp : SDNode<"AMDGPUISD::CLAMP", SDTFPTernaryOp, []>;
+
 // out = max(a, b) a and b are signed ints
 def AMDGPUsmax : SDNode<"AMDGPUISD::SMAX", SDTIntBinOp,
   [SDNPCommutative, SDNPAssociative]
@@ -58,6 +60,17 @@ def AMDGPUsmin : SDNode<"AMDGPUISD::SMIN", SDTIntBinOp,
 def AMDGPUumin : SDNode<"AMDGPUISD::UMIN", SDTIntBinOp,
   [SDNPCommutative, SDNPAssociative]
 >;
+
+
+def AMDGPUcvt_f32_ubyte0 : SDNode<"AMDGPUISD::CVT_F32_UBYTE0",
+  SDTIntToFPOp, []>;
+def AMDGPUcvt_f32_ubyte1 : SDNode<"AMDGPUISD::CVT_F32_UBYTE1",
+  SDTIntToFPOp, []>;
+def AMDGPUcvt_f32_ubyte2 : SDNode<"AMDGPUISD::CVT_F32_UBYTE2",
+  SDTIntToFPOp, []>;
+def AMDGPUcvt_f32_ubyte3 : SDNode<"AMDGPUISD::CVT_F32_UBYTE3",
+  SDTIntToFPOp, []>;
+
 
 // urecip - This operation is a helper for integer division, it returns the
 // result of 1 / a as a fractional unsigned integer.
@@ -92,6 +105,8 @@ def AMDGPUbfe_i32 : SDNode<"AMDGPUISD::BFE_I32", AMDGPUDTIntTernaryOp>;
 def AMDGPUbfi : SDNode<"AMDGPUISD::BFI", AMDGPUDTIntTernaryOp>;
 def AMDGPUbfm : SDNode<"AMDGPUISD::BFM", SDTIntBinOp>;
 
+def AMDGPUbrev : SDNode<"AMDGPUISD::BREV", SDTIntUnaryOp>;
+
 // Signed and unsigned 24-bit mulitply.  The highest 8-bits are ignore when
 // performing the mulitply.  The result is a 32-bit value.
 def AMDGPUmul_u24 : SDNode<"AMDGPUISD::MUL_U24", SDTIntBinOp,
@@ -100,3 +115,29 @@ def AMDGPUmul_u24 : SDNode<"AMDGPUISD::MUL_U24", SDTIntBinOp,
 def AMDGPUmul_i24 : SDNode<"AMDGPUISD::MUL_I24", SDTIntBinOp,
   [SDNPCommutative]
 >;
+
+def AMDGPUmad_u24 : SDNode<"AMDGPUISD::MAD_U24", AMDGPUDTIntTernaryOp,
+  []
+>;
+def AMDGPUmad_i24 : SDNode<"AMDGPUISD::MAD_I24", AMDGPUDTIntTernaryOp,
+  []
+>;
+
+//===----------------------------------------------------------------------===//
+// Flow Control Profile Types
+//===----------------------------------------------------------------------===//
+// Branch instruction where second and third are basic blocks
+def SDTIL_BRCond : SDTypeProfile<0, 2, [
+    SDTCisVT<0, OtherVT>
+    ]>;
+
+//===----------------------------------------------------------------------===//
+// Flow Control DAG Nodes
+//===----------------------------------------------------------------------===//
+def IL_brcond      : SDNode<"AMDGPUISD::BRANCH_COND", SDTIL_BRCond, [SDNPHasChain]>;
+
+//===----------------------------------------------------------------------===//
+// Call/Return DAG Nodes
+//===----------------------------------------------------------------------===//
+def IL_retflag       : SDNode<"AMDGPUISD::RET_FLAG", SDTNone,
+    [SDNPHasChain, SDNPOptInGlue]>;

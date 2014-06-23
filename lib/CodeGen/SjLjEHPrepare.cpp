@@ -248,19 +248,27 @@ void SjLjEHPrepare::lowerIncomingArguments(Function &F) {
   for (Function::arg_iterator AI = F.arg_begin(), AE = F.arg_end(); AI != AE;
        ++AI) {
     Type *Ty = AI->getType();
+    StructType *ST = dyn_cast<StructType>(Ty);
+    ArrayType *AT = dyn_cast<ArrayType>(Ty);
 
     // Aggregate types can't be cast, but are legal argument types, so we have
     // to handle them differently. We use an extract/insert pair as a
     // lightweight method to achieve the same goal.
-    if (isa<StructType>(Ty) || isa<ArrayType>(Ty)) {
-      Instruction *EI = ExtractValueInst::Create(AI, 0, "", AfterAllocaInsPt);
-      Instruction *NI = InsertValueInst::Create(AI, EI, 0);
-      NI->insertAfter(EI);
-      AI->replaceAllUsesWith(NI);
+    // There is one more special case though: aggregate type with no data   
+    // for example, a struct with no fields which is used extensively in Rust
+    // In this case there is no need to transfer anything
+    if (ST || AT) {      
+      if ((ST && ST->getNumElements() != 0) 
+        || (AT && AT->getNumElements() != 0)) {
+        Instruction *EI = ExtractValueInst::Create(AI, 0, "", AfterAllocaInsPt);
+        Instruction *NI = InsertValueInst::Create(AI, EI, 0);
+        NI->insertAfter(EI);
+        AI->replaceAllUsesWith(NI);
 
-      // Set the operand of the instructions back to the AllocaInst.
-      EI->setOperand(0, AI);
-      NI->setOperand(0, AI);
+        // Set the operand of the instructions back to the AllocaInst.
+        EI->setOperand(0, AI);
+        NI->setOperand(0, AI);
+      }
     } else {
       // This is always a no-op cast because we're casting AI to AI->getType()
       // so src and destination types are identical. BitCast is the only
