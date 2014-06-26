@@ -167,6 +167,9 @@ namespace {
       (void) llvm::createSeparateConstOffsetFromGEPPass();
       (void) llvm::createRewriteSymbolsPass();
 
+      // Specific to the rust-lang llvm branch:
+      (void) llvm::createNullCheckEliminationPass();
+
       (void)new llvm::IntervalPartition();
       (void)new llvm::ScalarEvolution();
       ((llvm::Function*)nullptr)->viewCFGOnly();
