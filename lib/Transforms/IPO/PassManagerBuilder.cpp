@@ -187,6 +187,8 @@ void PassManagerBuilder::populateModulePassManager(PassManagerBase &MPM) {
   MPM.add(createEarlyCSEPass());              // Catch trivial redundancies
   MPM.add(createJumpThreadingPass());         // Thread jumps.
   MPM.add(createCorrelatedValuePropagationPass()); // Propagate conditionals
+  // Specific to the rust-lang llvm branch:
+  MPM.add(createNullCheckEliminationPass());  // Eliminate null checks
   MPM.add(createCFGSimplificationPass());     // Merge & remove BBs
   MPM.add(createInstructionCombiningPass());  // Combine silly seq's
   addExtensionsToPM(EP_Peephole, MPM);
@@ -218,6 +220,8 @@ void PassManagerBuilder::populateModulePassManager(PassManagerBase &MPM) {
   addExtensionsToPM(EP_Peephole, MPM);
   MPM.add(createJumpThreadingPass());         // Thread jumps
   MPM.add(createCorrelatedValuePropagationPass());
+  // Specific to the rust-lang llvm branch:
+  MPM.add(createNullCheckEliminationPass());  // Eliminate null checks
   MPM.add(createDeadStoreEliminationPass());  // Delete dead stores
 
   addExtensionsToPM(EP_ScalarOptimizerLate, MPM);

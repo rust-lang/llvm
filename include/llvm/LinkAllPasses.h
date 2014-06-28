@@ -160,6 +160,9 @@ namespace {
       (void) llvm::createScalarizerPass();
       (void) llvm::createSeparateConstOffsetFromGEPPass();
 
+      // Specific to the rust-lang llvm branch:
+      (void) llvm::createNullCheckEliminationPass();
+
       (void)new llvm::IntervalPartition();
       (void)new llvm::FindUsedTypes();
       (void)new llvm::ScalarEvolution();
