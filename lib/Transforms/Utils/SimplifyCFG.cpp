@@ -1095,6 +1095,10 @@ static bool HoistThenElseCodeToIf(BranchInst *BI) {
     if (!I2->use_empty())
       I2->replaceAllUsesWith(I1);
     I1->intersectOptionalDataWith(I2);
+    I1->setMetadata(LLVMContext::MD_range,
+        MDNode::getMostGenericRange(
+          I1->getMetadata(LLVMContext::MD_range),
+          I2->getMetadata(LLVMContext::MD_range)));
     I2->eraseFromParent();
 
     I1 = BB1_Itr++;
