@@ -1988,6 +1988,16 @@ Instruction *InstCombiner::visitOr(BinaryOperator &I) {
     return BinaryOperator::CreateXor(NOr, C1);
   }
 
+  // ((~A & B) | A) -> (A | B)
+  if (match(Op0, m_And(m_Not(m_Value(A)), m_Value(B))) &&
+      match(Op1, m_Specific(A)))
+    return BinaryOperator::CreateOr(A, B);
+
+  // ((A & B) | ~A) -> (~A | B)
+  if (match(Op0, m_And(m_Value(A), m_Value(B))) &&
+      match(Op1, m_Not(m_Specific(A))))
+    return BinaryOperator::CreateOr(Builder->CreateNot(A), B);
+
   // (A & C)|(B & D)
   Value *C = nullptr, *D = nullptr;
   if (match(Op0, m_And(m_Value(A), m_Value(C))) &&
@@ -2444,6 +2454,14 @@ Instruction *InstCombiner::visitXor(BinaryOperator &I) {
       if ((A == C && B == D) || (A == D && B == C))
         return BinaryOperator::CreateXor(A, B);
     }
+    // (A & B) ^ (A ^ B) -> (A | B)
+    if (match(Op0I, m_And(m_Value(A), m_Value(B))) &&
+        match(Op1I, m_Xor(m_Specific(A), m_Specific(B))))
+      return BinaryOperator::CreateOr(A, B);
+    // (A ^ B) ^ (A & B) -> (A | B)
+    if (match(Op0I, m_Xor(m_Value(A), m_Value(B))) &&
+        match(Op1I, m_And(m_Specific(A), m_Specific(B))))
+      return BinaryOperator::CreateOr(A, B);
   }
 
   // (A | B)^(~A) -> (A | ~B)

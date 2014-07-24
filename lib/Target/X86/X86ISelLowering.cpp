@@ -1505,6 +1505,11 @@ void X86TargetLowering::resetOperationActions() {
     }
   }// has  AVX-512
 
+  if (!TM.Options.UseSoftFloat && Subtarget->hasBWI()) {
+    addRegisterClass(MVT::v32i1,  &X86::VK32RegClass);
+    addRegisterClass(MVT::v64i1,  &X86::VK64RegClass);
+  }
+
   // SIGN_EXTEND_INREGs are evaluated by the extend type. Handle the expansion
   // of this type with custom code.
   for (int VT = MVT::FIRST_VECTOR_VALUETYPE;
@@ -2312,6 +2317,10 @@ X86TargetLowering::LowerFormalArguments(SDValue Chain,
         RC = &X86::VK8RegClass;
       else if (RegVT == MVT::v16i1)
         RC = &X86::VK16RegClass;
+      else if (RegVT == MVT::v32i1)
+        RC = &X86::VK32RegClass;
+      else if (RegVT == MVT::v64i1)
+        RC = &X86::VK64RegClass;
       else
         llvm_unreachable("Unknown argument type!");
 
@@ -9054,6 +9063,18 @@ static SDValue getINSERTPS(ShuffleVectorSDNode *SVOp, SDLoc &dl,
     To = V2;
     DestIndex = std::find_if(Mask.begin(), Mask.end(), FromV1Predicate) -
                 Mask.begin();
+
+    // If we have 1 element from each vector, we have to check if we're
+    // changing V1's element's place. If so, we're done. Otherwise, we
+    // should assume we're changing V2's element's place and behave
+    // accordingly.
+    int FromV2 = std::count_if(Mask.begin(), Mask.end(), FromV2Predicate);
+    if (FromV1 == FromV2 && DestIndex == Mask[DestIndex] % 4) {
+      From = V2;
+      To = V1;
+      DestIndex =
+          std::find_if(Mask.begin(), Mask.end(), FromV2Predicate) - Mask.begin();
+    }
   } else {
     assert(std::count_if(Mask.begin(), Mask.end(), FromV2Predicate) == 1 &&
            "More than one element from V1 and from V2, or no elements from one "
@@ -9065,6 +9086,8 @@ static SDValue getINSERTPS(ShuffleVectorSDNode *SVOp, SDLoc &dl,
         std::find_if(Mask.begin(), Mask.end(), FromV2Predicate) - Mask.begin();
   }
 
+  // Get an index into the source vector in the range [0,4) (the mask is
+  // in the range [0,8) because it can address V1 and V2)
   unsigned SrcIndex = Mask[DestIndex] % 4;
   if (MayFoldLoad(From)) {
     // Trivial case, when From comes from a load and is only used by the
@@ -18783,49 +18806,6 @@ static SDValue PerformShuffleCombine(SDNode *N, SelectionDAG &DAG,
   SDValue N1 = N->getOperand(1);
   EVT VT = N->getValueType(0);
 
-  // Canonicalize shuffles that perform 'addsub' on packed float vectors
-  // according to the rule:
-  //  (shuffle (FADD A, B), (FSUB A, B), Mask) ->
-  //  (shuffle (FSUB A, -B), (FADD A, -B), Mask)
-  //
-  // Where 'Mask' is:
-  //  <0,5,2,7>             -- for v4f32 and v4f64 shuffles;
-  //  <0,3>                 -- for v2f64 shuffles;
-  //  <0,9,2,11,4,13,6,15>  -- for v8f32 shuffles.
-  //
-  // This helps pattern-matching more SSE3/AVX ADDSUB instructions
-  // during ISel stage.
-  if (N->getOpcode() == ISD::VECTOR_SHUFFLE &&
-      ((Subtarget->hasSSE3() && (VT == MVT::v4f32 || VT == MVT::v2f64)) ||
-       (Subtarget->hasAVX() && (VT == MVT::v8f32 || VT == MVT::v4f64))) &&
-      N0->getOpcode() == ISD::FADD && N1->getOpcode() == ISD::FSUB &&
-      // Operands to the FADD and FSUB must be the same.
-      ((N0->getOperand(0) == N1->getOperand(0) &&
-        N0->getOperand(1) == N1->getOperand(1)) ||
-       // FADD is commutable. See if by commuting the operands of the FADD
-       // we would still be able to match the operands of the FSUB dag node.
-       (N0->getOperand(1) == N1->getOperand(0) &&
-        N0->getOperand(0) == N1->getOperand(1))) &&
-      N0->getOperand(0)->getOpcode() != ISD::UNDEF &&
-      N0->getOperand(1)->getOpcode() != ISD::UNDEF) {
-    
-    ShuffleVectorSDNode *SV = cast<ShuffleVectorSDNode>(N);
-    unsigned NumElts = VT.getVectorNumElements();
-    ArrayRef<int> Mask = SV->getMask();
-    bool CanFold = true;
-
-    for (unsigned i = 0, e = NumElts; i != e && CanFold; ++i)
-      CanFold = Mask[i] == (int)((i & 1) ? i + NumElts : i);
-
-    if (CanFold) {
-      SDValue Op0 = N1->getOperand(0);
-      SDValue Op1 = DAG.getNode(ISD::FNEG, dl, VT, N1->getOperand(1));
-      SDValue Sub = DAG.getNode(ISD::FSUB, dl, VT, Op0, Op1);
-      SDValue Add = DAG.getNode(ISD::FADD, dl, VT, Op0, Op1);
-      return DAG.getVectorShuffle(VT, dl, Sub, Add, Mask);
-    }
-  }
-
   // Don't create instructions with illegal types after legalize types has run.
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   if (!DCI.isBeforeLegalize() && !TLI.isTypeLegal(VT.getVectorElementType()))
@@ -21840,21 +21820,23 @@ static SDValue performVectorCompareAndMaskUnaryOpCombine(SDNode *N,
   //       AND(VECTOR_CMP(x,y), constant2)
   //    constant2 = UNARYOP(constant)
 
-  // Early exit if this isn't a vector operation or if the operand of the
-  // unary operation isn't a bitwise AND.
+  // Early exit if this isn't a vector operation, the operand of the
+  // unary operation isn't a bitwise AND, or if the sizes of the operations
+  // aren't the same.
   EVT VT = N->getValueType(0);
   if (!VT.isVector() || N->getOperand(0)->getOpcode() != ISD::AND ||
-      N->getOperand(0)->getOperand(0)->getOpcode() != ISD::SETCC)
+      N->getOperand(0)->getOperand(0)->getOpcode() != ISD::SETCC ||
+      VT.getSizeInBits() != N->getOperand(0)->getValueType(0).getSizeInBits())
     return SDValue();
 
-  // Now check that the other operand of the AND is a constant splat. We could
+  // Now check that the other operand of the AND is a constant. We could
   // make the transformation for non-constant splats as well, but it's unclear
   // that would be a benefit as it would not eliminate any operations, just
   // perform one more step in scalar code before moving to the vector unit.
   if (BuildVectorSDNode *BV =
           dyn_cast<BuildVectorSDNode>(N->getOperand(0)->getOperand(1))) {
-    // Bail out if the vector isn't a constant splat.
-    if (!BV->getConstantSplatNode())
+    // Bail out if the vector isn't a constant.
+    if (!BV->isConstant())
       return SDValue();
 
     // Everything checks out. Build up the new and improved node.

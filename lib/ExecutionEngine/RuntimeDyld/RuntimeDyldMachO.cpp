@@ -27,9 +27,9 @@ using namespace llvm::object;
 
 namespace llvm {
 
-uint64_t RuntimeDyldMachO::decodeAddend(uint8_t *LocalAddress, unsigned NumBytes,
-                                        uint32_t RelType) const {
-  uint64_t Addend = 0;
+int64_t RuntimeDyldMachO::decodeAddend(uint8_t *LocalAddress, unsigned NumBytes,
+                                       uint32_t RelType) const {
+  int64_t Addend = 0;
   memcpy(&Addend, LocalAddress, NumBytes);
   return Addend;
 }
@@ -214,7 +214,7 @@ llvm::RuntimeDyldMachO::create(Triple::ArchType Arch, RTDyldMemoryManager *MM) {
     llvm_unreachable("Unsupported target for RuntimeDyldMachO.");
     break;
   case Triple::arm: return make_unique<RuntimeDyldMachOARM>(MM);
-  case Triple::arm64: return make_unique<RuntimeDyldMachOAArch64>(MM);
+  case Triple::aarch64: return make_unique<RuntimeDyldMachOAArch64>(MM);
   case Triple::x86: return make_unique<RuntimeDyldMachOI386>(MM);
   case Triple::x86_64: return make_unique<RuntimeDyldMachOX86_64>(MM);
   }
