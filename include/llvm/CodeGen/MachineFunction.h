@@ -258,6 +258,9 @@ public:
   /// Should we be emitting segmented stack stuff for the function
   bool shouldSplitStack();
 
+  /// Should we be probing the stack for the function
+  bool shouldProbeStack();
+
   /// getNumBlockIDs - Return the number of MBB ID's allocated.
   ///
   unsigned getNumBlockIDs() const { return (unsigned)MBBNumbering.size(); }

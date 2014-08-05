@@ -137,6 +137,10 @@ static bool InlineCallIfPossible(CallSite CS, InlineFunctionInfo &IFI,
 
   AdjustCallerSSPLevel(Caller, Callee);
 
+  if (Callee->hasFnAttribute("probe-stack")) {
+    Caller->addFnAttr("probe-stack", "");
+  }
+
   // Look at all of the allocas that we inlined through this call site.  If we
   // have already inlined other allocas through other calls into this function,
   // then we know that they have disjoint lifetimes and that we can merge them.
