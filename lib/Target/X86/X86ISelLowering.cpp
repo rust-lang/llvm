@@ -13581,7 +13581,7 @@ X86TargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
   MachineFunction &MF = DAG.getMachineFunction();
   bool SplitStack = MF.shouldSplitStack();
   bool Lower = (Subtarget->isOSWindows() && !Subtarget->isTargetMacho()) ||
-               SplitStack;
+               SplitStack || MF.shouldProbeStack();
   SDLoc dl(Op);
 
   if (!Lower) {
@@ -18093,7 +18093,7 @@ X86TargetLowering::EmitLoweredWinAlloca(MachineInstr *MI,
   // The lowering is pretty easy: we're just emitting the call to _alloca.  The
   // non-trivial part is impdef of ESP.
 
-  if (Subtarget->isTargetWin64()) {
+  if (Subtarget->isTargetWin64() || !Subtarget->isOSWindows()) {
     if (Subtarget->isTargetCygMing()) {
       // ___chkstk(Mingw64):
       // Clobbers R10, R11, RAX and EFLAGS.
@@ -18106,16 +18106,29 @@ X86TargetLowering::EmitLoweredWinAlloca(MachineInstr *MI,
         .addReg(X86::RSP, RegState::Define | RegState::Implicit)
         .addReg(X86::EFLAGS, RegState::Define | RegState::Implicit);
     } else {
-      // __chkstk(MSVCRT): does not update stack pointer.
-      // Clobbers R10, R11 and EFLAGS.
-      BuildMI(*BB, MI, DL, TII->get(X86::W64ALLOCA))
-        .addExternalSymbol("__chkstk")
-        .addReg(X86::RAX, RegState::Implicit)
-        .addReg(X86::EFLAGS, RegState::Define | RegState::Implicit);
-      // RAX has the offset to be subtracted from RSP.
-      BuildMI(*BB, MI, DL, TII->get(X86::SUB64rr), X86::RSP)
-        .addReg(X86::RSP)
-        .addReg(X86::RAX);
+      const char *StackProbeSymbol =
+        Subtarget->isOSWindows() ? "__chkstk" : "__probestack";
+      if (Subtarget->is64Bit()) {
+        // __chkstk(MSVCRT): does not update stack pointer.
+        // Clobbers R10, R11 and EFLAGS.
+        BuildMI(*BB, MI, DL, TII->get(X86::W64ALLOCA))
+          .addExternalSymbol(StackProbeSymbol)
+          .addReg(X86::RAX, RegState::Implicit)
+          .addReg(X86::EFLAGS, RegState::Define | RegState::Implicit);
+        // RAX has the offset to be subtracted from RSP.
+        BuildMI(*BB, MI, DL, TII->get(X86::SUB64rr), X86::RSP)
+          .addReg(X86::RSP)
+          .addReg(X86::RAX);
+      } else {
+        BuildMI(*BB, MI, DL, TII->get(X86::CALLpcrel32))
+          .addExternalSymbol(StackProbeSymbol)
+          .addReg(X86::EAX, RegState::Implicit)
+          .addReg(X86::EFLAGS, RegState::Define | RegState::Implicit);
+        // EAX has the offset to be subtracted from ESP.
+        BuildMI(*BB, MI, DL, TII->get(X86::SUB32rr), X86::ESP)
+          .addReg(X86::ESP)
+          .addReg(X86::EAX);
+      }
     }
   } else {
     const char *StackProbeSymbol =

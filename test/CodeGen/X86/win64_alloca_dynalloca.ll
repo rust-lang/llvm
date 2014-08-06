@@ -10,23 +10,23 @@ define i64 @unaligned(i64 %n, i64 %x) nounwind {
 ; EFI-LABEL: unaligned:
 entry:
 
-  %buf0 = alloca i8, i64 4096, align 1
+  %buf0 = alloca i8, i64 40096, align 1
 
 ; ___chkstk_ms does not adjust %rsp.
 ; M64: movq  %rsp, %rbp
-; M64:       $4096, %rax
+; M64:       $40096, %rax
 ; M64: callq ___chkstk_ms
 ; M64: subq  %rax, %rsp
 
 ; __chkstk does not adjust %rsp.
 ; W64: movq  %rsp, %rbp
-; W64:       $4096, %rax
+; W64:       $40096, %rax
 ; W64: callq __chkstk
 ; W64: subq  %rax, %rsp
 
 ; Freestanding
 ; EFI: movq  %rsp, %rbp
-; EFI:       $[[B0OFS:4096|4104]], %rsp
+; EFI:       $[[B0OFS:40096|40104]], %rsp
 ; EFI-NOT:   call
 
   %buf1 = alloca i8, i64 %n, align 1
@@ -53,12 +53,12 @@ entry:
 
 ; M64: subq  $48, %rsp
 ; M64: movq  %rax, 32(%rsp)
-; M64: leaq  -4096(%rbp), %r9
+; M64: leaq  -40096(%rbp), %r9
 ; M64: callq bar
 
 ; W64: subq  $48, %rsp
 ; W64: movq  %rax, 32(%rsp)
-; W64: leaq  -4096(%rbp), %r9
+; W64: leaq  -40096(%rbp), %r9
 ; W64: callq bar
 
 ; EFI: subq  $48, %rsp

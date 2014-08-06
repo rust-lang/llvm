@@ -130,6 +130,11 @@ bool MachineFunction::shouldSplitStack() {
   return getFunction()->hasFnAttribute("split-stack");
 }
 
+/// Should we be probing the stack for the function
+bool MachineFunction::shouldProbeStack() {
+  return getFunction()->hasFnAttribute("probe-stack");
+}
+
 /// RenumberBlocks - This discards all of the MachineBasicBlock numbers and
 /// recomputes them.  This guarantees that the MBB numbers are sequential,
 /// dense, and match the ordering of the blocks within the function.  If a
