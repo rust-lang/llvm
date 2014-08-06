@@ -18,7 +18,7 @@ allocas:
 
 ; CHECK: equal
 ; CHECK-NOT: vzeroupper
-; CHECK: _chkstk
+; CHECK: orl $0, 64(%esp)
 ; CHECK: ret
 
 define <8 x float> @foo(<8 x float> %y, i64* %p, double %x) {

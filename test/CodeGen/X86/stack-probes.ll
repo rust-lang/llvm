@@ -19,3 +19,19 @@ define void @test() "probe-stack" {
 ; X64-Linux-NEXT:  subq %rax, %rsp
 	
 }
+
+declare void @use_fast([4096 x i8]*)
+
+define void @test_fast() "probe-stack" {
+  %array = alloca [4096 x i8], align 16
+  call void @use_fast([4096 x i8]* %array)
+  ret void
+
+; X86-Linux-LABEL: test_fast:
+; X86-Linux:       subl    $4124, %esp
+; X86-Linux-NEXT:  orl     $0, 28(%esp)
+
+; X64-Linux-LABEL: test_fast:
+; X64-Linux:       subq    $4104, %rsp
+; X64-Linux-NEXT:  orq     $0, 8(%rsp)
+}

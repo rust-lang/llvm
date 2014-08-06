@@ -30,17 +30,17 @@ entry:
 ; Checks a stack allocation requiring call to __chkstk/___chkstk_ms
 define void @foo2() uwtable {
 entry:
-  %baz = alloca [4000 x i16], align 2
+  %baz = alloca [40000 x i16], align 2
   ret void
 }
 ; WIN64-LABEL: foo2:
 ; WIN64: .seh_proc foo2
-; WIN64: movabsq $8000, %rax
+; WIN64: movabsq $80000, %rax
 ; WIN64: callq {{__chkstk|___chkstk_ms}}
 ; WIN64: subq %rax, %rsp
-; WIN64: .seh_stackalloc 8000
+; WIN64: .seh_stackalloc 80000
 ; WIN64: .seh_endprologue
-; WIN64: addq $8000, %rsp
+; WIN64: addq $80000, %rsp
 ; WIN64: ret
 ; WIN64: .seh_endproc
 
