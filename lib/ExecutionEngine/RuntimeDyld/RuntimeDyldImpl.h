@@ -70,7 +70,7 @@ public:
   SectionEntry(StringRef name, uint8_t *address, size_t size,
                uintptr_t objAddress)
       : Name(name), Address(address), Size(size),
-        LoadAddress((uintptr_t)address), StubOffset(size),
+        LoadAddress(reinterpret_cast<uintptr_t>(address)), StubOffset(size),
         ObjAddress(objAddress) {}
 };
 
@@ -285,6 +285,13 @@ protected:
     *(Addr + 6) = (Value >> 8) & 0xFF;
     *(Addr + 7) = Value & 0xFF;
   }
+
+  /// Endian-aware read Read the least significant Size bytes from Src.
+  uint64_t readBytesUnaligned(uint8_t *Src, unsigned Size) const;
+
+  /// Endian-aware write. Write the least significant Size bytes from Value to
+  /// Dst.
+  void writeBytesUnaligned(uint64_t Value, uint8_t *Dst, unsigned Size) const;
 
   /// \brief Given the common symbols discovered in the object file, emit a
   /// new section for them and update the symbol mappings in the object and

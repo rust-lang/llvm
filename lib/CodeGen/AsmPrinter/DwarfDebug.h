@@ -377,9 +377,9 @@ class DwarfDebug : public AsmPrinterHandler {
                                                 LexicalScope *Scope);
 
   /// \brief Construct a DIE for this scope.
-  std::unique_ptr<DIE> constructScopeDIE(DwarfCompileUnit &TheCU,
-                                         LexicalScope *Scope);
-  void createAndAddScopeChildren(DwarfCompileUnit &TheCU, LexicalScope *Scope,
+  void constructScopeDIE(DwarfCompileUnit &TheCU, LexicalScope *Scope,
+                         SmallVectorImpl<std::unique_ptr<DIE>> &FinalChildren);
+  DIE *createAndAddScopeChildren(DwarfCompileUnit &TheCU, LexicalScope *Scope,
                                  DIE &ScopeDIE);
   /// \brief Construct a DIE for this abstract scope.
   void constructAbstractSubprogramScopeDIE(DwarfCompileUnit &TheCU,
@@ -389,7 +389,8 @@ class DwarfDebug : public AsmPrinterHandler {
                                    LexicalScope *Scope);
   /// A helper function to create children of a Scope DIE.
   DIE *createScopeChildrenDIE(DwarfCompileUnit &TheCU, LexicalScope *Scope,
-                              SmallVectorImpl<std::unique_ptr<DIE>> &Children);
+                              SmallVectorImpl<std::unique_ptr<DIE>> &Children,
+                              unsigned *ChildScopeCount = nullptr);
 
   /// \brief Emit initial Dwarf sections with a label at the start of each one.
   void emitSectionLabels();
@@ -508,15 +509,13 @@ class DwarfDebug : public AsmPrinterHandler {
   DwarfCompileUnit &constructDwarfCompileUnit(DICompileUnit DIUnit);
 
   /// \brief Construct imported_module or imported_declaration DIE.
-  void constructImportedEntityDIE(DwarfCompileUnit &TheCU, const MDNode *N);
+  void constructAndAddImportedEntityDIE(DwarfCompileUnit &TheCU,
+                                        const MDNode *N);
 
   /// \brief Construct import_module DIE.
-  void constructImportedEntityDIE(DwarfCompileUnit &TheCU, const MDNode *N,
-                                  DIE &Context);
-
-  /// \brief Construct import_module DIE.
-  void constructImportedEntityDIE(DwarfCompileUnit &TheCU,
-                                  const DIImportedEntity &Module, DIE &Context);
+  std::unique_ptr<DIE>
+  constructImportedEntityDIE(DwarfCompileUnit &TheCU,
+                             const DIImportedEntity &Module);
 
   /// \brief Register a source line with debug info. Returns the unique
   /// label that was emitted and which provides correspondence to the
@@ -562,8 +561,8 @@ class DwarfDebug : public AsmPrinterHandler {
 
   void attachRangesOrLowHighPC(DwarfCompileUnit &Unit, DIE &D,
                                const SmallVectorImpl<InsnRange> &Ranges);
-  void attachLowHighPC(DwarfCompileUnit &Unit, DIE &D, MCSymbol *Begin,
-                       MCSymbol *End);
+  void attachLowHighPC(DwarfCompileUnit &Unit, DIE &D, const MCSymbol *Begin,
+                       const MCSymbol *End);
 
 public:
   //===--------------------------------------------------------------------===//
