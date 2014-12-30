@@ -385,6 +385,7 @@ public:
   bool isTargetFreeBSD() const {
     return TargetTriple.getOS() == Triple::FreeBSD;
   }
+  bool isTargetDragonFly() const { return TargetTriple.isOSDragonFly(); }
   bool isTargetSolaris() const {
     return TargetTriple.getOS() == Triple::Solaris;
   }

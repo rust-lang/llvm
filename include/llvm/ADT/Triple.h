@@ -368,6 +368,8 @@ public:
     return getOS() == Triple::FreeBSD;
   }
 
+  bool isOSDragonFly() const { return getOS() == Triple::DragonFly; }
+
   bool isWindowsMSVCEnvironment() const {
     return getOS() == Triple::Win32 &&
            (getEnvironment() == Triple::UnknownEnvironment ||
