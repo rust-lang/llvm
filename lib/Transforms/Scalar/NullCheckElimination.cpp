@@ -240,7 +240,7 @@ NullCheckElimination::isNonNullOrPoisonPhi(SmallPhiSet *VisitedPhis,
   // If we've already seen this phi, return `true`, even though it may not be
   // nonnull, since some other operand in a cycle of phis may invalidate the
   // optimistic assumption that the entire cycle is nonnull, including this phi.
-  if (!VisitedPhis->insert(PN))
+  if (!VisitedPhis->insert(PN).second)
     return true;
 
   // Use a sensible limit to avoid iterating over long chains of phis that are
