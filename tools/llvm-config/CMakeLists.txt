@@ -5,9 +5,15 @@ set(BUILDVARIABLES_OBJPATH ${CMAKE_CURRENT_BINARY_DIR}/BuildVariables.inc)
 
 # Compute the substitution values for various items.
 get_property(LLVM_SYSTEM_LIBS_LIST TARGET LLVMSupport PROPERTY LLVM_SYSTEM_LIBS)
-foreach(l ${LLVM_SYSTEM_LIBS_LIST})
-  set(SYSTEM_LIBS ${SYSTEM_LIBS} "-l${l}")
-endforeach()
+if (${CMAKE_SYSTEM_NAME} MATCHES "Bitrig")
+  foreach(l ${LLVM_SYSTEM_LIBS_LIST})
+    set(SYSTEM_LIBS ${SYSTEM_LIBS} "-${l}")
+  endforeach()
+else()
+  foreach(l ${LLVM_SYSTEM_LIBS_LIST})
+    set(SYSTEM_LIBS ${SYSTEM_LIBS} "-l${l}")
+  endforeach()
+endif()
 string(REPLACE ";" " " SYSTEM_LIBS "${SYSTEM_LIBS}")
 
 # Use configure_file to create BuildVariables.inc.

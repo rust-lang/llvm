@@ -406,6 +406,7 @@ public:
   bool isTargetFreeBSD() const { return TargetTriple.isOSFreeBSD(); }
   bool isTargetDragonFly() const { return TargetTriple.isOSDragonFly(); }
   bool isTargetSolaris() const { return TargetTriple.isOSSolaris(); }
+  bool isTargetBitrig() const { return TargetTriple.isOSBitrig(); }
 
   bool isTargetELF() const { return TargetTriple.isOSBinFormatELF(); }
   bool isTargetCOFF() const { return TargetTriple.isOSBinFormatCOFF(); }
