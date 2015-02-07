@@ -117,6 +117,11 @@ HOST_OS=@HOST_OS@
 # Target operating system for which LLVM will compile for.
 TARGET_OS=@TARGET_OS@
 
+ifeq ($(TARGET_OS),Bitrig)
+PROJ_docsdir  := $(PROJ_prefix)/share/docs/llvm
+PROJ_mandir   := $(PROJ_prefix)/man
+endif
+
 # Host hardware architecture
 HOST_ARCH=@HOST_ARCH@
 # Target hardware architecture
