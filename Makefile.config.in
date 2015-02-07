@@ -118,8 +118,8 @@ HOST_OS=@HOST_OS@
 TARGET_OS=@TARGET_OS@
 
 ifeq ($(TARGET_OS),Bitrig)
-	PROJ_docsdir	:= $(PROJ_prefix)/share/docs/llvm
-	PROJ_mandir		:= $(PROJ_prefix)/man
+PROJ_docsdir  := $(PROJ_prefix)/share/docs/llvm
+PROJ_mandir   := $(PROJ_prefix)/man
 endif
 
 # Host hardware architecture
