@@ -733,9 +733,6 @@ const PassInfo *PMTopLevelManager::findAnalysisPassInfo(AnalysisID AID) const {
   const PassInfo *&PI = AnalysisPassInfos[AID];
   if (!PI)
     PI = PassRegistry::getPassRegistry()->getPassInfo(AID);
-  else
-    assert(PI == PassRegistry::getPassRegistry()->getPassInfo(AID) &&
-           "The pass info pointer changed for an analysis ID!");
 
   return PI;
 }
