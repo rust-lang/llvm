@@ -1078,6 +1078,7 @@ static unsigned X86ChooseCmpOpcode(EVT VT, const X86Subtarget *Subtarget) {
 
   switch (VT.getSimpleVT().SimpleTy) {
   default:       return 0;
+  case MVT::i1:  return X86::CMP8rr;
   case MVT::i8:  return X86::CMP8rr;
   case MVT::i16: return X86::CMP16rr;
   case MVT::i32: return X86::CMP32rr;

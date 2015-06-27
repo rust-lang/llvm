@@ -1074,6 +1074,8 @@ bool FastISel::selectIntrinsicCall(const IntrinsicInst *II) {
   // At -O0 we don't care about the lifetime intrinsics.
   case Intrinsic::lifetime_start:
   case Intrinsic::lifetime_end:
+  // At -O0 we don't care about assumptions.
+  case Intrinsic::assume:
   // The donothing intrinsic does, well, nothing.
   case Intrinsic::donothing:
     return true;
