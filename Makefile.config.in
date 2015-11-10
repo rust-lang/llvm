@@ -52,7 +52,7 @@ ifeq ($(PROJECT_NAME),$(LLVMPackageName))
 LLVM_SRC_ROOT   := $(call realpath, @abs_top_srcdir@)
 LLVM_OBJ_ROOT   := $(call realpath, @abs_top_builddir@)
 PROJ_SRC_ROOT   := $(LLVM_SRC_ROOT)
-PROJ_SRC_DIR    := $(LLVM_SRC_ROOT)$(patsubst $(PROJ_OBJ_ROOT)%,%,$(PROJ_OBJ_DIR))
+PROJ_SRC_DIR    := $(patsubst $(PROJ_OBJ_ROOT)%,$(LLVM_SRC_ROOT)%,$(PROJ_OBJ_DIR))
 
 ifneq ($(CLANG_SRC_ROOT),)
   CLANG_SRC_ROOT:= $(call realpath, $(CLANG_SRC_ROOT))
@@ -79,7 +79,7 @@ endif
 ifndef LLVM_OBJ_ROOT
 $(error Projects must define LLVM_OBJ_ROOT)
 endif
-PROJ_SRC_DIR := $(call realpath, $(PROJ_SRC_ROOT)/$(patsubst $(PROJ_OBJ_ROOT)%,%,$(PROJ_OBJ_DIR)))
+PROJ_SRC_DIR := $(call realpath, $(patsubst $(PROJ_OBJ_ROOT)%,$(PROJ_SRC_ROOT)%,$(PROJ_OBJ_DIR)))
 prefix          := $(PROJ_INSTALL_ROOT)
 PROJ_prefix     := $(prefix)
 ifndef PROJ_VERSION
