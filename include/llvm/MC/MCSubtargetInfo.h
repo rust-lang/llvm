@@ -172,9 +172,18 @@ public:
     return Found != ProcDesc.end() && StringRef(Found->Key) == CPU;
   }
 
+
   /// Returns string representation of scheduler comment
   virtual std::string getSchedInfoStr(MCInst const &MCI) const {
     return {};
+  }
+
+  ArrayRef<SubtargetFeatureKV> getCPUTable() const {
+    return ProcDesc;
+  }
+
+  ArrayRef<SubtargetFeatureKV> getFeatureTable() const {
+    return ProcFeatures;
   }
 };
 
