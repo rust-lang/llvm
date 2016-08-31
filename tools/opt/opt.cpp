@@ -34,6 +34,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/Linker/Linker.h"
 #include "llvm/LinkAllIR.h"
 #include "llvm/LinkAllPasses.h"
 #include "llvm/MC/SubtargetFeature.h"
@@ -74,9 +75,9 @@ static cl::opt<std::string> PassPipeline(
 
 // Other command line options...
 //
-static cl::opt<std::string>
-InputFilename(cl::Positional, cl::desc("<input bitcode file>"),
-    cl::init("-"), cl::value_desc("filename"));
+static cl::list<std::string> // XXX EMSCRIPTEN: support multiple input files, link them
+InputFilenames(cl::Positional, cl::ZeroOrMore,
+               cl::desc("<input bitcode files>"));
 
 static cl::opt<std::string>
 OutputFilename("o", cl::desc("Override output filename"),
@@ -393,7 +394,40 @@ int main(int argc, char **argv) {
     Context.setDiagnosticHotnessRequested(true);
 
   // Load the input module...
-  std::unique_ptr<Module> M = parseIRFile(InputFilename, Err, Context);
+  std::unique_ptr<Module> M;
+
+  // XXX EMSCRIPTEN: support for multiple files
+  if (InputFilenames.size() == 0)
+    M = parseIRFile("-", Err, Context);
+  else if (InputFilenames.size() == 1)
+    M = parseIRFile(InputFilenames[0], Err, Context);
+  else {
+    // link them in
+    M = nullptr;
+    std::unique_ptr<Linker> L;
+
+    for (unsigned i = 0; i < InputFilenames.size(); ++i) {
+      std::unique_ptr<Module> MM = parseIRFile(InputFilenames[i], Err, Context);
+      if (!MM.get()) {
+        errs() << argv[0] << ": error loading file '" <<InputFilenames[i]<< "'\n";
+        return 1;
+      }
+
+      if (!NoVerify && verifyModule(*MM, &errs())) {
+        errs() << argv[0] << ": " << InputFilenames[i]
+               << ": error: input module is broken!\n";
+        return 1;
+      }
+
+      if (i == 0) {
+        M.swap(MM);
+        L = make_unique<Linker>(*M);
+      } else {
+        if (L->linkInModule(std::move(MM)))
+          return 1;
+      }
+    }
+  }
 
   if (!M) {
     Err.print(argv[0], errs());
@@ -408,7 +442,7 @@ int main(int argc, char **argv) {
   // pass pipelines.  Otherwise we can crash on broken code during
   // doInitialization().
   if (!NoVerify && verifyModule(*M, &errs())) {
-    errs() << argv[0] << ": " << InputFilename
+    errs() << argv[0] << ": "
            << ": error: input module is broken!\n";
     return 1;
   }

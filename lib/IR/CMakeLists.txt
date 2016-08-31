@@ -37,6 +37,7 @@ add_llvm_library(LLVMCore
   Mangler.cpp
   Metadata.cpp
   Module.cpp
+  NaClAtomicIntrinsics.cpp
   ModuleSummaryIndex.cpp
   Operator.cpp
   OptBisect.cpp

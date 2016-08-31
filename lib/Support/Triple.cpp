@@ -53,6 +53,7 @@ const char *Triple::getArchTypeName(ArchType Kind) {
   case nvptx64:        return "nvptx64";
   case le32:           return "le32";
   case le64:           return "le64";
+  case asmjs:          return "asmjs"; // @LOCALMOD Emscripten
   case amdil:          return "amdil";
   case amdil64:        return "amdil64";
   case hsail:          return "hsail";
@@ -121,6 +122,8 @@ const char *Triple::getArchTypePrefix(ArchType Kind) {
   case le32:        return "le32";
   case le64:        return "le64";
 
+  case asmjs:       return "asmjs"; // @LOCALMOD Emscripten
+
   case amdil:
   case amdil64:     return "amdil";
 
@@ -180,6 +183,7 @@ const char *Triple::getOSTypeName(OSType Kind) {
   case Haiku: return "haiku";
   case Minix: return "minix";
   case RTEMS: return "rtems";
+  case Emscripten: return "emscripten"; // @LOCALMOD Emscripten
   case NaCl: return "nacl";
   case CNK: return "cnk";
   case Bitrig: return "bitrig";
@@ -273,6 +277,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("nvptx64", nvptx64)
     .Case("le32", le32)
     .Case("le64", le64)
+    .Case("asmjs", asmjs) // @LOCALMOD Emscripten
     .Case("amdil", amdil)
     .Case("amdil64", amdil64)
     .Case("hsail", hsail)
@@ -384,6 +389,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("nvptx64", Triple::nvptx64)
     .Case("le32", Triple::le32)
     .Case("le64", Triple::le64)
+    .Case("asmjs", Triple::asmjs) // @LOCALMOD Emscripten
     .Case("amdil", Triple::amdil)
     .Case("amdil64", Triple::amdil64)
     .Case("hsail", Triple::hsail)
@@ -450,6 +456,7 @@ static Triple::OSType parseOS(StringRef OSName) {
     .StartsWith("haiku", Triple::Haiku)
     .StartsWith("minix", Triple::Minix)
     .StartsWith("rtems", Triple::RTEMS)
+    .StartsWith("emscripten", Triple::Emscripten) // @LOCALMOD Emscripten
     .StartsWith("nacl", Triple::NaCl)
     .StartsWith("cnk", Triple::CNK)
     .StartsWith("bitrig", Triple::Bitrig)
@@ -584,6 +591,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::amdil:
   case Triple::amdil64:
   case Triple::armeb:
+  case Triple::asmjs: // @LOCALMOD Emscripten
   case Triple::avr:
   case Triple::bpfeb:
   case Triple::bpfel:
@@ -1127,6 +1135,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::armeb:
   case llvm::Triple::hexagon:
   case llvm::Triple::le32:
+  case llvm::Triple::asmjs: // @LOCALMOD Emscripten
   case llvm::Triple::mips:
   case llvm::Triple::mipsel:
   case llvm::Triple::nvptx:
@@ -1207,6 +1216,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::hexagon:
   case Triple::kalimba:
   case Triple::le32:
+  case Triple::asmjs: // @LOCALMOD Emscripten
   case Triple::mips:
   case Triple::mipsel:
   case Triple::nvptx:
@@ -1256,6 +1266,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::r600:
   case Triple::tce:
   case Triple::xcore:
+  case Triple::asmjs: // @LOCALMOD Emscripten
   case Triple::sparcel:
   case Triple::shave:
     T.setArch(UnknownArch);
@@ -1313,6 +1324,7 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::amdgcn:
   case Triple::amdil64:
   case Triple::amdil:
+  case Triple::asmjs:
   case Triple::avr:
   case Triple::hexagon:
   case Triple::hsail64:
@@ -1393,6 +1405,7 @@ bool Triple::isLittleEndian() const {
   case Triple::amdil64:
   case Triple::amdil:
   case Triple::arm:
+  case Triple::asmjs:
   case Triple::avr:
   case Triple::bpfel:
   case Triple::hexagon:

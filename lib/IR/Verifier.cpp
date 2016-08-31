@@ -606,10 +606,10 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
              GV.hasAvailableExternallyLinkage(),
          "Global is marked as dllimport, but not external", &GV);
 
-  if (!GV.hasInitializer()) {
+  //if (!GV.hasInitializer()) { // XXX EMSCRIPTEN - do not do extra verification below, 40x slower linking on some big projects
     visitGlobalValue(GV);
     return;
-  }
+  //}
 
   // Walk any aggregate initializers looking for bitcasts between address spaces
   visitConstantExprsRecursively(GV.getInitializer());

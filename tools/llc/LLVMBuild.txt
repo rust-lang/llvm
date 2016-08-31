@@ -20,3 +20,4 @@ type = Tool
 name = llc
 parent = Tools
 required_libraries = AsmParser BitReader IRReader MIRParser TransformUtils all-targets
+
