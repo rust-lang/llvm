@@ -1547,6 +1547,61 @@ static bool optimizeOnceStoredGlobal(GlobalVariable *GV, Value *StoredOnceVal,
   return false;
 }
 
+/// TryToAddRangeMetadata - At this point, we have learned that the only
+/// two values ever stored into GV are its initializer and OtherVal.  See if we
+/// can annotate loads from it with range metadata describing this.
+/// This exposes the values to other scalar optimizations.
+static bool TryToAddRangeMetadata(GlobalVariable *GV, Constant *OtherVal) {
+  Type *GVElType = GV->getType()->getElementType();
+
+  // If GVElType is already i1, it already has a minimal range. If the type of
+  // the GV is an FP value, pointer or vector, don't do this optimization
+  // because range metadata is currently only supported on scalar integers.
+  if (GVElType == Type::getInt1Ty(GV->getContext()) ||
+      GVElType->isFloatingPointTy() ||
+      GVElType->isPointerTy() || GVElType->isVectorTy())
+    return false;
+
+  // Walk the use list of the global seeing if all the uses are load or store.
+  // If there is anything else, bail out.
+  for (User *U : GV->users())
+    if (!isa<LoadInst>(U) && !isa<StoreInst>(U))
+      return false;
+
+  Constant *InitVal = GV->getInitializer();
+  assert(InitVal->getType() != Type::getInt1Ty(GV->getContext()) &&
+         "No reason to add range metadata!");
+
+  // The MD_range metadata only supports absolute integer constants.
+  if (!isa<ConstantInt>(InitVal) || !isa<ConstantInt>(OtherVal))
+    return false;
+
+  DEBUG(dbgs() << "   *** ADDING RANGE METADATA: " << *GV);
+
+  for (Value::user_iterator I = GV->user_begin(), E = GV->user_end(); I != E; ++I){
+    Instruction *UI = cast<Instruction>(*I);
+    if (LoadInst *LI = dyn_cast<LoadInst>(UI)) {
+      // If we already have a range, don't add a new one, so that GlobalOpt
+      // terminates. In theory, we could merge the two ranges.
+      if (LI->getMetadata(LLVMContext::MD_range))
+        return false;
+      // Add range metadata to the load. We have two possible values, and we
+      // need to create a half-open range. The range can wrap, so we can use
+      // either signed or unsigned; we pick signed because it might be prettier
+      // in common cases.
+      Constant *Cmp = ConstantExpr::getICmp(ICmpInst::ICMP_SLT, InitVal, OtherVal);
+      Constant *One = ConstantInt::get(LI->getType(), 1);
+      SmallVector<Metadata *, 2> NewOps;
+      NewOps.push_back(ConstantAsMetadata::get(ConstantExpr::getSelect(Cmp, InitVal, OtherVal)));
+      NewOps.push_back(ConstantAsMetadata::get(ConstantExpr::getAdd(ConstantExpr::getSelect(Cmp, OtherVal, InitVal), One)));
+      MDNode *MD = MDNode::get(LI->getContext(), NewOps);
+      LI->setMetadata(LLVMContext::MD_range, MD);
+    }
+  }
+
+  return true;
+}
+
 /// At this point, we have learned that the only two values ever stored into GV
 /// are its initializer and OtherVal.  See if we can shrink the global into a
 /// boolean and select between the two values whenever it is used.  This exposes
@@ -1926,9 +1981,10 @@ static bool processInternalGlobal(
 
     // Otherwise, if the global was not a boolean, we can shrink it to be a
     // boolean.
+    // XXX EMSCRIPTEN - add range metadata instead
     if (Constant *SOVConstant = dyn_cast<Constant>(GS.StoredOnceValue)) {
       if (GS.Ordering == AtomicOrdering::NotAtomic) {
-        if (TryToShrinkGlobalToBoolean(GV, SOVConstant)) {
+        if (TryToAddRangeMetadata(GV, SOVConstant)) { // XXX EMSCRIPTEN
           ++NumShrunkToBool;
           return true;
         }

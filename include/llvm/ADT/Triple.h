@@ -78,6 +78,7 @@ public:
     nvptx64,        // NVPTX: 64-bit
     le32,           // le32: generic little-endian 32-bit CPU (PNaCl)
     le64,           // le64: generic little-endian 64-bit CPU (PNaCl)
+    asmjs,          // asm.js JavaScript subset @LOCALMOD Emscripten
     amdil,          // AMDIL
     amdil64,        // AMDIL with 64-bit pointers
     hsail,          // AMD HSAIL
@@ -156,6 +157,7 @@ public:
     Haiku,
     Minix,
     RTEMS,
+    Emscripten, // Emscripten JavaScript runtime @LOCALMOD Emscripten
     NaCl,       // Native Client
     CNK,        // BG/P Compute-Node Kernel
     Bitrig,
@@ -530,6 +532,13 @@ public:
   bool isOSNaCl() const {
     return getOS() == Triple::NaCl;
   }
+
+  // @LOCALMOD-START Emscripten
+  /// Tests whether the OS is Emscripten.
+  bool isOSEmscripten() const {
+    return getOS() == Triple::Emscripten;
+  }
+  // @LOCALMOD-END Emscripten
 
   /// Tests whether the OS is Linux.
   bool isOSLinux() const {

@@ -8,6 +8,9 @@ set(LLVM_LINK_COMPONENTS
   InstCombine
   Instrumentation
   Linker
+  # @LOCALMOD-BEGIN
+  JSBackend
+  # @LOCALMOD-END
   ObjCARCOpts
   ScalarOpts
   Support
