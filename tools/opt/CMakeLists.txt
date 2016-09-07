@@ -6,6 +6,10 @@ set(LLVM_LINK_COMPONENTS
   Core
   IPO
   IRReader
+  Linker
+  # @LOCALMOD-BEGIN
+  JSBackend
+  # @LOCALMOD-END
   InstCombine
   Instrumentation
   MC
