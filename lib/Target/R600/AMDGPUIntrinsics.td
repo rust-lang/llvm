@@ -30,8 +30,6 @@ let TargetPrefix = "AMDGPU", isTarget = 1 in {
   def int_AMDGPU_lrp : Intrinsic<[llvm_float_ty], [llvm_float_ty, llvm_float_ty, llvm_float_ty], [IntrNoMem]>;
   def int_AMDGPU_mul : Intrinsic<[llvm_float_ty], [llvm_float_ty, llvm_float_ty], [IntrNoMem]>;
   def int_AMDGPU_pow : Intrinsic<[llvm_float_ty], [llvm_float_ty, llvm_float_ty], [IntrNoMem]>;
-  def int_AMDGPU_rcp : Intrinsic<[llvm_float_ty], [llvm_float_ty], [IntrNoMem]>;
-  def int_AMDGPU_rsq : Intrinsic<[llvm_float_ty], [llvm_float_ty], [IntrNoMem]>;
   def int_AMDGPU_seq : Intrinsic<[llvm_float_ty], [llvm_float_ty, llvm_float_ty], [IntrNoMem]>;
   def int_AMDGPU_sgt : Intrinsic<[llvm_float_ty], [llvm_float_ty, llvm_float_ty], [IntrNoMem]>;
   def int_AMDGPU_sge : Intrinsic<[llvm_float_ty], [llvm_float_ty, llvm_float_ty], [IntrNoMem]>;
@@ -69,7 +67,7 @@ let TargetPrefix = "AMDGPU", isTarget = 1 in {
   def int_AMDGPU_barrier_global  : Intrinsic<[], [], []>;
 }
 
-// Legacy names for compatability.
+// Legacy names for compatibility.
 let TargetPrefix = "AMDIL", isTarget = 1 in {
   def int_AMDIL_abs : Intrinsic<[llvm_anyint_ty], [LLVMMatchType<0>], [IntrNoMem]>;
   def int_AMDIL_fraction : Intrinsic<[llvm_anyfloat_ty], [LLVMMatchType<0>], [IntrNoMem]>;

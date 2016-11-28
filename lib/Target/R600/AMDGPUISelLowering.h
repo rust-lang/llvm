@@ -54,6 +54,7 @@ private:
   SDValue LowerFCEIL(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFTRUNC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFRINT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerFNEARBYINT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFFLOOR(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerUINT_TO_FP(SDValue Op, SelectionDAG &DAG) const;
@@ -174,6 +175,9 @@ enum {
   DWORDADDR,
   FRACT,
   CLAMP,
+
+  // SIN_HW, COS_HW - f32 for SI, 1 ULP max error, valid from -100 pi to 100 pi.
+  // Denormals handled on some parts.
   COS_HW,
   SIN_HW,
   FMAX,
@@ -183,6 +187,15 @@ enum {
   SMIN,
   UMIN,
   URECIP,
+  DIV_SCALE,
+  DIV_FMAS,
+  DIV_FIXUP,
+  TRIG_PREOP, // 1 ULP max error for f64
+
+  // RCP, RSQ - For f32, 1 ULP max error, no denormal handling.
+  //            For f64, max error 2^29 ULP, handles denormals.
+  RCP,
+  RSQ,
   DOT4,
   BFE_U32, // Extract range of bits with zero extension to 32-bits.
   BFE_I32, // Extract range of bits with sign extension to 32-bits.

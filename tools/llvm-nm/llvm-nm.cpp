@@ -81,6 +81,7 @@ cl::alias ExternalOnly2("g", cl::desc("Alias for --extern-only"),
 
 cl::opt<bool> BSDFormat("B", cl::desc("Alias for --format=bsd"));
 cl::opt<bool> POSIXFormat("P", cl::desc("Alias for --format=posix"));
+cl::opt<bool> DarwinFormat("m", cl::desc("Alias for --format=darwin"));
 
 cl::opt<bool> PrintFileName(
     "print-file-name",
@@ -577,6 +578,10 @@ static char getSymbolNMTypeChar(MachOObjectFile &Obj, basic_symbol_iterator I) {
     StringRef SegmentName = Obj.getSectionFinalSegmentName(Ref);
     if (SegmentName == "__TEXT" && SectionName == "__text")
       return 't';
+    else if (SegmentName == "__DATA" && SectionName == "__data")
+      return 'd';
+    else if (SegmentName == "__DATA" && SectionName == "__bss")
+      return 'b';
     else
       return 's';
   }
@@ -752,20 +757,28 @@ static void dumpSymbolNamesFromFile(std::string &Filename) {
       if (ChildOrErr.getError())
         continue;
       if (SymbolicFile *O = dyn_cast<SymbolicFile>(&*ChildOrErr.get())) {
-        outs() << O->getFileName() << ":\n";
+        if (isa<MachOObjectFile>(O)) {
+          outs() << Filename << "(" << O->getFileName() << ")";
+        } else
+          outs() << O->getFileName();
+        outs() << ":\n";
         dumpSymbolNamesFromObject(O);
       }
     }
     return;
   }
   if (MachOUniversalBinary *UB = dyn_cast<MachOUniversalBinary>(Bin.get())) {
+    bool moreThanOneArch = UB->getNumberOfObjects() > 1;
     for (MachOUniversalBinary::object_iterator I = UB->begin_objects(),
                                                E = UB->end_objects();
          I != E; ++I) {
       std::unique_ptr<ObjectFile> Obj;
       std::unique_ptr<Archive> A;
       if (!I->getAsObjectFile(Obj)) {
-        outs() << Obj->getFileName() << ":\n";
+        outs() << Obj->getFileName();
+        if (isa<MachOObjectFile>(Obj.get()) && moreThanOneArch)
+          outs() << " (for architecture " << I->getArchTypeName() << ")";
+        outs() << ":\n";
         dumpSymbolNamesFromObject(Obj.get());
       }
       else if (!I->getAsArchive(A)) {
@@ -776,8 +789,14 @@ static void dumpSymbolNamesFromFile(std::string &Filename) {
           if (ChildOrErr.getError())
             continue;
           if (SymbolicFile *O = dyn_cast<SymbolicFile>(&*ChildOrErr.get())) {
-            outs() << A->getFileName() << ":";
-            outs() << O->getFileName() << ":\n";
+            outs() << A->getFileName();
+            if (isa<MachOObjectFile>(O)) {
+              outs() << "(" << O->getFileName() << ")";
+              if (moreThanOneArch)
+                outs() << " (for architecture " << I->getArchTypeName() << ")";
+            } else
+              outs() << ":" << O->getFileName();
+            outs() << ":\n";
             dumpSymbolNamesFromObject(O);
           }
         }
@@ -810,6 +829,8 @@ int main(int argc, char **argv) {
     OutputFormat = bsd;
   if (POSIXFormat)
     OutputFormat = posix;
+  if (DarwinFormat)
+    OutputFormat = darwin;
 
   // The relative order of these is important. If you pass --size-sort it should
   // only print out the size. However, if you pass -S --size-sort, it should

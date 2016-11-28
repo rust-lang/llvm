@@ -325,6 +325,7 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(TargetMachine &TM) :
     setOperationAction(ISD::FTRUNC, VT, Expand);
     setOperationAction(ISD::FMUL, VT, Expand);
     setOperationAction(ISD::FRINT, VT, Expand);
+    setOperationAction(ISD::FNEARBYINT, VT, Expand);
     setOperationAction(ISD::FSQRT, VT, Expand);
     setOperationAction(ISD::FSIN, VT, Expand);
     setOperationAction(ISD::FSUB, VT, Expand);
@@ -333,6 +334,9 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(TargetMachine &TM) :
     setOperationAction(ISD::VSELECT, VT, Expand);
     setOperationAction(ISD::FCOPYSIGN, VT, Expand);
   }
+
+  setOperationAction(ISD::FNEARBYINT, MVT::f32, Custom);
+  setOperationAction(ISD::FNEARBYINT, MVT::f64, Custom);
 
   setTargetDAGCombine(ISD::MUL);
   setTargetDAGCombine(ISD::SELECT_CC);
@@ -501,6 +505,7 @@ SDValue AMDGPUTargetLowering::LowerOperation(SDValue Op,
   case ISD::FCEIL: return LowerFCEIL(Op, DAG);
   case ISD::FTRUNC: return LowerFTRUNC(Op, DAG);
   case ISD::FRINT: return LowerFRINT(Op, DAG);
+  case ISD::FNEARBYINT: return LowerFNEARBYINT(Op, DAG);
   case ISD::FFLOOR: return LowerFFLOOR(Op, DAG);
   case ISD::UINT_TO_FP: return LowerUINT_TO_FP(Op, DAG);
 
@@ -836,6 +841,28 @@ SDValue AMDGPUTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     case AMDGPUIntrinsic::AMDIL_clamp: // Legacy name.
       return DAG.getNode(AMDGPUISD::CLAMP, DL, VT,
                          Op.getOperand(1), Op.getOperand(2), Op.getOperand(3));
+
+    case Intrinsic::AMDGPU_div_scale:
+      return DAG.getNode(AMDGPUISD::DIV_SCALE, DL, VT,
+                         Op.getOperand(1), Op.getOperand(2));
+
+    case Intrinsic::AMDGPU_div_fmas:
+      return DAG.getNode(AMDGPUISD::DIV_FMAS, DL, VT,
+                         Op.getOperand(1), Op.getOperand(2), Op.getOperand(3));
+
+    case Intrinsic::AMDGPU_div_fixup:
+      return DAG.getNode(AMDGPUISD::DIV_FIXUP, DL, VT,
+                         Op.getOperand(1), Op.getOperand(2), Op.getOperand(3));
+
+    case Intrinsic::AMDGPU_trig_preop:
+      return DAG.getNode(AMDGPUISD::TRIG_PREOP, DL, VT,
+                         Op.getOperand(1), Op.getOperand(2));
+
+    case Intrinsic::AMDGPU_rcp:
+      return DAG.getNode(AMDGPUISD::RCP, DL, VT, Op.getOperand(1));
+
+    case Intrinsic::AMDGPU_rsq:
+      return DAG.getNode(AMDGPUISD::RSQ, DL, VT, Op.getOperand(1));
 
     case AMDGPUIntrinsic::AMDGPU_imax:
       return DAG.getNode(AMDGPUISD::SMAX, DL, VT, Op.getOperand(1),
@@ -1631,7 +1658,7 @@ SDValue AMDGPUTargetLowering::LowerFTRUNC(SDValue Op, SelectionDAG &DAG) const {
                             DAG.getConstant(1023, MVT::i32));
 
   // Extract the sign bit.
-  const SDValue SignBitMask = DAG.getConstant(1ul << 31, MVT::i32);
+  const SDValue SignBitMask = DAG.getConstant(UINT32_C(1) << 31, MVT::i32);
   SDValue SignBit = DAG.getNode(ISD::AND, SL, MVT::i32, Hi, SignBitMask);
 
   // Extend back to to 64-bits.
@@ -1640,7 +1667,8 @@ SDValue AMDGPUTargetLowering::LowerFTRUNC(SDValue Op, SelectionDAG &DAG) const {
   SignBit64 = DAG.getNode(ISD::BITCAST, SL, MVT::i64, SignBit64);
 
   SDValue BcInt = DAG.getNode(ISD::BITCAST, SL, MVT::i64, Src);
-  const SDValue FractMask = DAG.getConstant((1L << FractBits) - 1, MVT::i64);
+  const SDValue FractMask
+    = DAG.getConstant((UINT64_C(1) << FractBits) - 1, MVT::i64);
 
   SDValue Shr = DAG.getNode(ISD::SRA, SL, MVT::i64, FractMask, Exp);
   SDValue Not = DAG.getNOT(SL, Shr, MVT::i64);
@@ -1681,6 +1709,13 @@ SDValue AMDGPUTargetLowering::LowerFRINT(SDValue Op, SelectionDAG &DAG) const {
   SDValue Cond = DAG.getSetCC(SL, SetCCVT, Fabs, C2, ISD::SETOGT);
 
   return DAG.getSelect(SL, MVT::f64, Cond, Src, Tmp2);
+}
+
+SDValue AMDGPUTargetLowering::LowerFNEARBYINT(SDValue Op, SelectionDAG &DAG) const {
+  // FNEARBYINT and FRINT are the same, except in their handling of FP
+  // exceptions. Those aren't really meaningful for us, and OpenCL only has
+  // rint, so just treat them as equivalent.
+  return DAG.getNode(ISD::FRINT, SDLoc(Op), Op.getValueType(), Op.getOperand(0));
 }
 
 SDValue AMDGPUTargetLowering::LowerFFLOOR(SDValue Op, SelectionDAG &DAG) const {
@@ -2029,6 +2064,14 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(FMIN)
   NODE_NAME_CASE(SMIN)
   NODE_NAME_CASE(UMIN)
+  NODE_NAME_CASE(URECIP)
+  NODE_NAME_CASE(DIV_SCALE)
+  NODE_NAME_CASE(DIV_FMAS)
+  NODE_NAME_CASE(DIV_FIXUP)
+  NODE_NAME_CASE(TRIG_PREOP)
+  NODE_NAME_CASE(RCP)
+  NODE_NAME_CASE(RSQ)
+  NODE_NAME_CASE(DOT4)
   NODE_NAME_CASE(BFE_U32)
   NODE_NAME_CASE(BFE_I32)
   NODE_NAME_CASE(BFI)
@@ -2038,8 +2081,6 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(MUL_I24)
   NODE_NAME_CASE(MAD_U24)
   NODE_NAME_CASE(MAD_I24)
-  NODE_NAME_CASE(URECIP)
-  NODE_NAME_CASE(DOT4)
   NODE_NAME_CASE(EXPORT)
   NODE_NAME_CASE(CONST_ADDRESS)
   NODE_NAME_CASE(REGISTER_LOAD)

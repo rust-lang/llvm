@@ -116,14 +116,20 @@ class MipsAsmParser : public MCTargetAsmParser {
 
   bool needsExpansion(MCInst &Inst);
 
-  void expandInstruction(MCInst &Inst, SMLoc IDLoc,
+  // Expands assembly pseudo instructions.
+  // Returns false on success, true otherwise.
+  bool expandInstruction(MCInst &Inst, SMLoc IDLoc,
                          SmallVectorImpl<MCInst> &Instructions);
-  void expandLoadImm(MCInst &Inst, SMLoc IDLoc,
+
+  bool expandLoadImm(MCInst &Inst, SMLoc IDLoc,
                      SmallVectorImpl<MCInst> &Instructions);
-  void expandLoadAddressImm(MCInst &Inst, SMLoc IDLoc,
+
+  bool expandLoadAddressImm(MCInst &Inst, SMLoc IDLoc,
                             SmallVectorImpl<MCInst> &Instructions);
-  void expandLoadAddressReg(MCInst &Inst, SMLoc IDLoc,
+
+  bool expandLoadAddressReg(MCInst &Inst, SMLoc IDLoc,
                             SmallVectorImpl<MCInst> &Instructions);
+
   void expandMemInst(MCInst &Inst, SMLoc IDLoc,
                      SmallVectorImpl<MCInst> &Instructions, bool isLoad,
                      bool isImmOpnd);
@@ -965,7 +971,7 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   }   // if load/store
 
   if (needsExpansion(Inst))
-    expandInstruction(Inst, IDLoc, Instructions);
+    return expandInstruction(Inst, IDLoc, Instructions);
   else
     Instructions.push_back(Inst);
 
@@ -978,16 +984,25 @@ bool MipsAsmParser::needsExpansion(MCInst &Inst) {
   case Mips::LoadImm32Reg:
   case Mips::LoadAddr32Imm:
   case Mips::LoadAddr32Reg:
+  case Mips::LoadImm64Reg:
     return true;
   default:
     return false;
   }
 }
 
-void MipsAsmParser::expandInstruction(MCInst &Inst, SMLoc IDLoc,
+bool MipsAsmParser::expandInstruction(MCInst &Inst, SMLoc IDLoc,
                                       SmallVectorImpl<MCInst> &Instructions) {
   switch (Inst.getOpcode()) {
+  default: assert(0 && "unimplemented expansion");
+    return true;
   case Mips::LoadImm32Reg:
+    return expandLoadImm(Inst, IDLoc, Instructions);
+  case Mips::LoadImm64Reg:
+    if (!isGP64()) {
+      Error(IDLoc, "instruction requires a CPU feature not currently enabled");
+      return true;
+    }
     return expandLoadImm(Inst, IDLoc, Instructions);
   case Mips::LoadAddr32Imm:
     return expandLoadAddressImm(Inst, IDLoc, Instructions);
@@ -996,7 +1011,31 @@ void MipsAsmParser::expandInstruction(MCInst &Inst, SMLoc IDLoc,
   }
 }
 
-void MipsAsmParser::expandLoadImm(MCInst &Inst, SMLoc IDLoc,
+namespace {
+template <int Shift, bool PerformShift>
+void createShiftOr(int64_t Value, unsigned RegNo, SMLoc IDLoc,
+                   SmallVectorImpl<MCInst> &Instructions) {
+  MCInst tmpInst;
+  if (PerformShift) {
+    tmpInst.setOpcode(Mips::DSLL);
+    tmpInst.addOperand(MCOperand::CreateReg(RegNo));
+    tmpInst.addOperand(MCOperand::CreateReg(RegNo));
+    tmpInst.addOperand(MCOperand::CreateImm(16));
+    tmpInst.setLoc(IDLoc);
+    Instructions.push_back(tmpInst);
+    tmpInst.clear();
+  }
+  tmpInst.setOpcode(Mips::ORi);
+  tmpInst.addOperand(MCOperand::CreateReg(RegNo));
+  tmpInst.addOperand(MCOperand::CreateReg(RegNo));
+  tmpInst.addOperand(
+      MCOperand::CreateImm(((Value & (0xffffLL << Shift)) >> Shift)));
+  tmpInst.setLoc(IDLoc);
+  Instructions.push_back(tmpInst);
+}
+}
+
+bool MipsAsmParser::expandLoadImm(MCInst &Inst, SMLoc IDLoc,
                                   SmallVectorImpl<MCInst> &Instructions) {
   MCInst tmpInst;
   const MCOperand &ImmOp = Inst.getOperand(1);
@@ -1004,8 +1043,10 @@ void MipsAsmParser::expandLoadImm(MCInst &Inst, SMLoc IDLoc,
   const MCOperand &RegOp = Inst.getOperand(0);
   assert(RegOp.isReg() && "expected register operand kind");
 
-  int ImmValue = ImmOp.getImm();
+  int64_t ImmValue = ImmOp.getImm();
   tmpInst.setLoc(IDLoc);
+  // FIXME: gas has a special case for values that are 000...1111, which
+  // becomes a li -1 and then a dsrl
   if (0 <= ImmValue && ImmValue <= 65535) {
     // For 0 <= j <= 65535.
     // li d,j => ori d,$zero,j
@@ -1022,25 +1063,76 @@ void MipsAsmParser::expandLoadImm(MCInst &Inst, SMLoc IDLoc,
     tmpInst.addOperand(MCOperand::CreateReg(Mips::ZERO));
     tmpInst.addOperand(MCOperand::CreateImm(ImmValue));
     Instructions.push_back(tmpInst);
-  } else {
-    // For any other value of j that is representable as a 32-bit integer.
+  } else if ((ImmValue & 0xffffffff) == ImmValue) {
+    // For any value of j that is representable as a 32-bit integer, create
+    // a sequence of:
     // li d,j => lui d,hi16(j)
     //           ori d,d,lo16(j)
     tmpInst.setOpcode(Mips::LUi);
     tmpInst.addOperand(MCOperand::CreateReg(RegOp.getReg()));
     tmpInst.addOperand(MCOperand::CreateImm((ImmValue & 0xffff0000) >> 16));
     Instructions.push_back(tmpInst);
-    tmpInst.clear();
-    tmpInst.setOpcode(Mips::ORi);
+    createShiftOr<0, false>(ImmValue, RegOp.getReg(), IDLoc, Instructions);
+  } else if ((ImmValue & (0xffffLL << 48)) == 0) {
+    if (!isGP64()) {
+      Error (IDLoc, "instruction requires a CPU feature not currently enabled");
+      return true;
+    }
+
+    //            <-------  lo32 ------>
+    // <-------  hi32 ------>
+    // <- hi16 ->             <- lo16 ->
+    //  _________________________________
+    // |          |          |          |
+    // | 16-bytes | 16-bytes | 16-bytes |
+    // |__________|__________|__________|
+    //
+    // For any value of j that is representable as a 48-bit integer, create
+    // a sequence of:
+    // li d,j => lui d,hi16(j)
+    //           ori d,d,hi16(lo32(j))
+    //           dsll d,d,16
+    //           ori d,d,lo16(lo32(j))
+    tmpInst.setOpcode(Mips::LUi);
     tmpInst.addOperand(MCOperand::CreateReg(RegOp.getReg()));
-    tmpInst.addOperand(MCOperand::CreateReg(RegOp.getReg()));
-    tmpInst.addOperand(MCOperand::CreateImm(ImmValue & 0xffff));
-    tmpInst.setLoc(IDLoc);
+    tmpInst.addOperand(
+        MCOperand::CreateImm((ImmValue & (0xffffLL << 32)) >> 32));
     Instructions.push_back(tmpInst);
+    createShiftOr<16, false>(ImmValue, RegOp.getReg(), IDLoc, Instructions);
+    createShiftOr<0, true>(ImmValue, RegOp.getReg(), IDLoc, Instructions);
+  } else {
+    if (!isGP64()) {
+      Error (IDLoc, "instruction requires a CPU feature not currently enabled");
+      return true;
+    }
+
+    // <-------  hi32 ------> <-------  lo32 ------>
+    // <- hi16 ->                        <- lo16 ->
+    //  ___________________________________________
+    // |          |          |          |          |
+    // | 16-bytes | 16-bytes | 16-bytes | 16-bytes |
+    // |__________|__________|__________|__________|
+    //
+    // For any value of j that isn't representable as a 48-bit integer.
+    // li d,j => lui d,hi16(j)
+    //           ori d,d,lo16(hi32(j))
+    //           dsll d,d,16
+    //           ori d,d,hi16(lo32(j))
+    //           dsll d,d,16
+    //           ori d,d,lo16(lo32(j))
+    tmpInst.setOpcode(Mips::LUi);
+    tmpInst.addOperand(MCOperand::CreateReg(RegOp.getReg()));
+    tmpInst.addOperand(
+        MCOperand::CreateImm((ImmValue & (0xffffLL << 48)) >> 48));
+    Instructions.push_back(tmpInst);
+    createShiftOr<32, false>(ImmValue, RegOp.getReg(), IDLoc, Instructions);
+    createShiftOr<16, true>(ImmValue, RegOp.getReg(), IDLoc, Instructions);
+    createShiftOr<0, true>(ImmValue, RegOp.getReg(), IDLoc, Instructions);
   }
+  return false;
 }
 
-void
+bool
 MipsAsmParser::expandLoadAddressReg(MCInst &Inst, SMLoc IDLoc,
                                     SmallVectorImpl<MCInst> &Instructions) {
   MCInst tmpInst;
@@ -1081,9 +1173,10 @@ MipsAsmParser::expandLoadAddressReg(MCInst &Inst, SMLoc IDLoc,
     tmpInst.addOperand(MCOperand::CreateReg(SrcRegOp.getReg()));
     Instructions.push_back(tmpInst);
   }
+  return false;
 }
 
-void
+bool
 MipsAsmParser::expandLoadAddressImm(MCInst &Inst, SMLoc IDLoc,
                                     SmallVectorImpl<MCInst> &Instructions) {
   MCInst tmpInst;
@@ -1115,6 +1208,7 @@ MipsAsmParser::expandLoadAddressImm(MCInst &Inst, SMLoc IDLoc,
     tmpInst.addOperand(MCOperand::CreateImm(ImmValue & 0xffff));
     Instructions.push_back(tmpInst);
   }
+  return false;
 }
 
 void MipsAsmParser::expandMemInst(MCInst &Inst, SMLoc IDLoc,

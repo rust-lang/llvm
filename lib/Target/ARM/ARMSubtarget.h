@@ -14,6 +14,7 @@
 #ifndef ARMSUBTARGET_H
 #define ARMSUBTARGET_H
 
+#include "ARMJITInfo.h"
 #include "ARMSelectionDAGInfo.h"
 #include "MCTargetDesc/ARMMCTargetDesc.h"
 #include "llvm/ADT/Triple.h"
@@ -256,10 +257,12 @@ protected:
 
   const DataLayout *getDataLayout() const { return &DL; }
   const ARMSelectionDAGInfo *getSelectionDAGInfo() const { return &TSInfo; }
+  ARMJITInfo *getJITInfo() { return &JITInfo; }
 
 private:
   const DataLayout DL;
   ARMSelectionDAGInfo TSInfo;
+  ARMJITInfo JITInfo;
 
   void initializeEnvironment();
   void resetSubtargetFeatures(StringRef CPU, StringRef FS);
@@ -421,6 +424,9 @@ public:
   bool enablePostRAScheduler(CodeGenOpt::Level OptLevel,
                              TargetSubtargetInfo::AntiDepBreakMode& Mode,
                              RegClassVector& CriticalPathRCs) const override;
+
+  // enableAtomicExpandLoadLinked - True if we need to expand our atomics.
+  bool enableAtomicExpandLoadLinked() const override;
 
   /// getInstrItins - Return the instruction itineraies based on subtarget
   /// selection.

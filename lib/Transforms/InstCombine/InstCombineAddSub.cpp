@@ -865,30 +865,6 @@ Value *FAddCombine::createAddendVal
   return createFMul(OpndVal, Coeff.getValue(Instr->getType()));
 }
 
-// dyn_castFoldableMul - If this value is a multiply that can be folded into
-// other computations (because it has a constant operand), return the
-// non-constant operand of the multiply, and set CST to point to the multiplier.
-// Otherwise, return null.
-//
-static inline Value *dyn_castFoldableMul(Value *V, Constant *&CST) {
-  if (!V->hasOneUse() || !V->getType()->isIntOrIntVectorTy())
-    return nullptr;
-
-  Instruction *I = dyn_cast<Instruction>(V);
-  if (!I) return nullptr;
-
-  if (I->getOpcode() == Instruction::Mul)
-    if ((CST = dyn_cast<Constant>(I->getOperand(1))))
-      return I->getOperand(0);
-  if (I->getOpcode() == Instruction::Shl)
-    if ((CST = dyn_cast<Constant>(I->getOperand(1)))) {
-      // The multiplier is really 1 << CST.
-      CST = ConstantExpr::getShl(ConstantInt::get(V->getType(), 1), CST);
-      return I->getOperand(0);
-    }
-  return nullptr;
-}
-
 // If one of the operands only has one non-zero bit, and if the other
 // operand has a known-zero bit in a more significant place than it (not
 // including the sign bit) the ripple may go up to and fill the zero, but
@@ -978,6 +954,48 @@ bool InstCombiner::WillNotOverflowUnsignedAdd(Value *LHS, Value *RHS) {
     return true;
 
   return false;
+ }
+
+// Checks if any operand is negative and we can convert add to sub.
+// This function checks for following negative patterns
+//   ADD(XOR(OR(Z, NOT(C)), C)), 1) == NEG(AND(Z, C))
+//   TODO: ADD(XOR(AND(Z, ~C), ~C), 1) == NEG(OR(Z, C)) if C is even
+//   TODO: XOR(AND(Z, ~C), (~C + 1)) == NEG(OR(Z, C)) if C is odd
+Value *checkForNegativeOperand(BinaryOperator &I,
+                               InstCombiner::BuilderTy *Builder) {
+  Value *LHS = I.getOperand(0), *RHS = I.getOperand(1);
+
+  // This function creates 2 instructions to replace ADD, we need at least one 
+  // of LHS or RHS to have one use to ensure benefit in transform.
+  if (!LHS->hasOneUse() && !RHS->hasOneUse())
+    return nullptr;
+
+  bool IHasNSW = I.hasNoSignedWrap();
+  bool IHasNUW = I.hasNoUnsignedWrap();
+
+  Value *X = nullptr, *Y = nullptr, *Z = nullptr;
+  const APInt *C1 = nullptr, *C2 = nullptr;
+
+  // if ONE is on other side, swap
+  if (match(RHS, m_Add(m_Value(X), m_One())))
+    std::swap(LHS, RHS);
+
+  if (match(LHS, m_Add(m_Value(X), m_One()))) {
+    // if XOR on other side, swap
+    if (match(RHS, m_Xor(m_Value(Y), m_APInt(C1))))
+      std::swap(X, RHS);
+
+    // X = XOR(Y, C1), Y = OR(Z, C2), C2 = NOT(C1) ==> X == NOT(AND(Z, C1))
+    // ADD(ADD(X, 1), RHS) == ADD(X, ADD(RHS, 1)) == SUB(RHS, AND(Z, C1))
+    if (match(X, m_Xor(m_Value(Y), m_APInt(C1)))) {
+      if (match(Y, m_Or(m_Value(Z), m_APInt(C2))) && (*C2 == ~(*C1))) {
+        Value *NewAnd = Builder->CreateAnd(Z, *C1);
+        return Builder->CreateSub(RHS, NewAnd, "", IHasNUW, IHasNSW);
+      }
+    }
+  }
+
+  return nullptr;
 }
 
 Instruction *InstCombiner::visitAdd(BinaryOperator &I) {
@@ -1089,23 +1107,8 @@ Instruction *InstCombiner::visitAdd(BinaryOperator &I) {
     if (Value *V = dyn_castNegVal(RHS))
       return BinaryOperator::CreateSub(LHS, V);
 
-
-  {
-    Constant *C2;
-    if (Value *X = dyn_castFoldableMul(LHS, C2)) {
-      if (X == RHS) // X*C + X --> X * (C+1)
-        return BinaryOperator::CreateMul(RHS, AddOne(C2));
-
-      // X*C1 + X*C2 --> X * (C1+C2)
-      Constant *C1;
-      if (X == dyn_castFoldableMul(RHS, C1))
-        return BinaryOperator::CreateMul(X, ConstantExpr::getAdd(C1, C2));
-    }
-
-    // X + X*C --> X * (C+1)
-    if (dyn_castFoldableMul(RHS, C2) == LHS)
-      return BinaryOperator::CreateMul(LHS, AddOne(C2));
-  }
+  if (Value *V = checkForNegativeOperand(I, Builder))
+    return ReplaceInstUsesWith(I, V);
 
   // A+B --> A|B iff A and B have no bits set in common.
   if (IntegerType *IT = dyn_cast<IntegerType>(I.getType())) {
@@ -1591,16 +1594,6 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
       Value *NewMul = Builder->CreateMul(A, ConstantExpr::getNeg(CI));
       return BinaryOperator::CreateAdd(Op0, NewMul);
     }
-  }
-
-  Constant *C1;
-  if (Value *X = dyn_castFoldableMul(Op0, C1)) {
-    if (X == Op1)  // X*C - X --> X * (C-1)
-      return BinaryOperator::CreateMul(Op1, SubOne(C1));
-
-    Constant *C2;   // X*C1 - X*C2 -> X * (C1-C2)
-    if (X == dyn_castFoldableMul(Op1, C2))
-      return BinaryOperator::CreateMul(X, ConstantExpr::getSub(C1, C2));
   }
 
   // Optimize pointer differences into the same array into a size.  Consider:

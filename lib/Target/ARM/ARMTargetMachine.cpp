@@ -52,7 +52,7 @@ ARMBaseTargetMachine::ARMBaseTargetMachine(const Target &T, StringRef TT,
                                            CodeGenOpt::Level OL,
                                            bool isLittle)
   : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
-    Subtarget(TT, CPU, FS, isLittle, Options), JITInfo() {
+    Subtarget(TT, CPU, FS, isLittle, Options) {
 
   // Default to triple-appropriate float ABI
   if (Options.FloatABIType == FloatABI::Default)
@@ -171,16 +171,15 @@ TargetPassConfig *ARMBaseTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void ARMPassConfig::addIRPasses() {
-  const ARMSubtarget *Subtarget = &getARMSubtarget();
-  if (Subtarget->hasAnyDataBarrier() && !Subtarget->isThumb1Only()) {
-    addPass(createAtomicExpandLoadLinkedPass(TM));
+  addPass(createAtomicExpandLoadLinkedPass(TM));
 
-    // Cmpxchg instructions are often used with a subsequent comparison to
-    // determine whether it succeeded. We can exploit existing control-flow in
-    // ldrex/strex loops to simplify this, but it needs tidying up.
+  // Cmpxchg instructions are often used with a subsequent comparison to
+  // determine whether it succeeded. We can exploit existing control-flow in
+  // ldrex/strex loops to simplify this, but it needs tidying up.
+  const ARMSubtarget *Subtarget = &getARMSubtarget();
+  if (Subtarget->hasAnyDataBarrier() && !Subtarget->isThumb1Only())
     if (TM->getOptLevel() != CodeGenOpt::None && EnableAtomicTidy)
       addPass(createCFGSimplificationPass());
-  }
 
   TargetPassConfig::addIRPasses();
 }
