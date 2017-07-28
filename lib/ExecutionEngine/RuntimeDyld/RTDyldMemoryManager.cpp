@@ -243,9 +243,9 @@ RTDyldMemoryManager::getSymbolAddressInProcess(const std::string &Name) {
   if (Name == "stat") return (uint64_t)&stat;
   if (Name == "fstat") return (uint64_t)&fstat;
   if (Name == "lstat") return (uint64_t)&lstat;
-  if (Name == "stat64") return (uint64_t)&stat64;
-  if (Name == "fstat64") return (uint64_t)&fstat64;
-  if (Name == "lstat64") return (uint64_t)&lstat64;
+  // if (Name == "stat64") return (uint64_t)&stat64;
+  // if (Name == "fstat64") return (uint64_t)&fstat64;
+  // if (Name == "lstat64") return (uint64_t)&lstat64;
   if (Name == "atexit") return (uint64_t)&atexit;
   if (Name == "mknod") return (uint64_t)&mknod;
 
