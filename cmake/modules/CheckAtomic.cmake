@@ -62,19 +62,20 @@ else()
   check_working_cxx_atomics64(HAVE_CXX_ATOMICS64_WITHOUT_LIB)
 endif()
 
-# If not, check if the library exists, and atomics work with it.
-if(NOT HAVE_CXX_ATOMICS64_WITHOUT_LIB)
-  check_library_exists(atomic __atomic_load_8 "" HAVE_CXX_LIBATOMICS64)
-  if(HAVE_CXX_LIBATOMICS64)
-    list(APPEND CMAKE_REQUIRED_LIBRARIES "atomic")
-    check_working_cxx_atomics64(HAVE_CXX_ATOMICS64_WITH_LIB)
-    if (NOT HAVE_CXX_ATOMICS64_WITH_LIB)
-      message(FATAL_ERROR "Host compiler must support std::atomic!")
-    endif()
-  else()
-    message(FATAL_ERROR "Host compiler appears to require libatomic, but cannot find it.")
-  endif()
-endif()
+# RUST-SPECIFIC - commented out, see commit message
+# # If not, check if the library exists, and atomics work with it.
+# if(NOT HAVE_CXX_ATOMICS64_WITHOUT_LIB)
+#   check_library_exists(atomic __atomic_load_8 "" HAVE_CXX_LIBATOMICS64)
+#   if(HAVE_CXX_LIBATOMICS64)
+#     list(APPEND CMAKE_REQUIRED_LIBRARIES "atomic")
+#     check_working_cxx_atomics64(HAVE_CXX_ATOMICS64_WITH_LIB)
+#     if (NOT HAVE_CXX_ATOMICS64_WITH_LIB)
+#       message(FATAL_ERROR "Host compiler must support std::atomic!")
+#     endif()
+#   else()
+#     message(FATAL_ERROR "Host compiler appears to require libatomic, but cannot find it.")
+#   endif()
+# endif()
 
 ## TODO: This define is only used for the legacy atomic operations in
 ## llvm's Atomic.h, which should be replaced.  Other code simply
