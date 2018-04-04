@@ -95,8 +95,8 @@ static const std::pair<LibFunc, AllocFnsTy> AllocationFnData[] = {
   {LibFunc_strdup,              {StrDupLike,  1, -1, -1}},
   {LibFunc_strndup,             {StrDupLike,  2, 1,  -1}},
 
-  {LibFunc_rust_alloc,         {MallocLike,  3, 0,  -1}},
-  {LibFunc_rust_realloc,       {ReallocLike,  6, 3,  -1}},
+  {LibFunc_rust_alloc,         {MallocLike,  2, 0,  -1}},
+  {LibFunc_rust_realloc,       {ReallocLike,  4, 3,  -1}},
   // TODO: Handle "int posix_memalign(void **, size_t, size_t)"
 };
 
