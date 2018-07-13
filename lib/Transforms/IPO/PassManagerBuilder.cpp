@@ -359,6 +359,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
   // in C++ so I don't want to remove it much.
 
   MPM.add(createIndVarSimplifyPass());        // Canonicalize indvars
+  MPM.add(createCFGSimplificationPass());     // Clean up after IndVarSimplify.
   MPM.add(createLoopIdiomPass());             // Recognize idioms like memset.
   MPM.add(createLoopDeletionPass());          // Delete dead loops
   if (EnableLoopInterchange) {
