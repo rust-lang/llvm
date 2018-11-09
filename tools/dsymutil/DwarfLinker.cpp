@@ -1758,7 +1758,7 @@ PointerIntPair<DeclContext *, 1> DeclContextTree::getChildDeclContext(
                         File);
               (void)gotFileName;
               assert(gotFileName && "Must get file name from line table");
-#ifdef HAVE_REALPATH
+#if defined(HAVE_REALPATH) && defined(PATH_MAX)
               char RealPath[PATH_MAX + 1];
               RealPath[PATH_MAX] = 0;
               if (::realpath(File.c_str(), RealPath))
