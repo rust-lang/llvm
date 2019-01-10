@@ -211,6 +211,22 @@ struct RegClassWeight {
   unsigned WeightLimit;
 };
 
+struct FrameBaseLocation {
+  enum LocationKind {
+    Register,
+    CFA,
+    TargetIndex
+  } Kind;
+  struct TargetIndexInfo {
+    unsigned Index;
+    signed Offset;
+  };
+  union {
+    unsigned Reg;
+    TargetIndexInfo TI;
+  };
+};
+
 /// TargetRegisterInfo base class - We assume that the target defines a static
 /// array of TargetRegisterDesc objects that represent all of the machine
 /// registers that the target has.  As such, we simply have to track a pointer
@@ -987,6 +1003,13 @@ public:
   /// getFrameRegister - This method should return the register used as a base
   /// for values allocated in the current stack frame.
   virtual unsigned getFrameRegister(const MachineFunction &MF) const = 0;
+
+  virtual FrameBaseLocation getFrameBaseLocation(const MachineFunction &MF) const {
+    FrameBaseLocation Loc;
+    Loc.Kind = FrameBaseLocation::Register;
+    Loc.Reg = getFrameRegister(MF);
+    return Loc;
+  }
 
   /// Mark a register and all its aliases as reserved in the given set.
   void markSuperRegs(BitVector &RegisterSet, unsigned Reg) const;

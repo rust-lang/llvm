@@ -45,6 +45,12 @@ public:
 
   unsigned getFrameRegister(const MachineFunction &MF) const override;
 
+  FrameBaseLocation getFrameBaseLocation(const MachineFunction &MF) const override {
+    FrameBaseLocation Loc;
+    Loc.Kind = FrameBaseLocation::CFA;
+    return Loc;
+  }
+
   ManagedStringPool *getStrPool() const {
     return const_cast<ManagedStringPool *>(&ManagedStrPool);
   }
