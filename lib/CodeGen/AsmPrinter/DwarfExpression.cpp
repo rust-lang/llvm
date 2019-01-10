@@ -437,3 +437,11 @@ void DwarfExpression::addFragmentOffset(const DIExpression *Expr) {
     addOpPiece(FragmentOffset - OffsetInBits);
   OffsetInBits = FragmentOffset;
 }
+
+void DwarfExpression::addTargetIndexLocation(unsigned Index, int64_t Offset) {
+  assert(LocationKind == Implicit || LocationKind == Unknown);
+  LocationKind = Implicit;
+  emitOp(dwarf::DW_OP_WASM_location);
+  emitUnsigned(Index);
+  emitSigned(Offset);
+}

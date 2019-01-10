@@ -164,6 +164,45 @@ static MVT typeForRegClass(const TargetRegisterClass *RC) {
   llvm_unreachable("unrecognized register class");
 }
 
+static void fixupFollowingDebugValues(DenseMap<unsigned, unsigned> &Reg2Local,
+                                      MachineRegisterInfo &MRI,
+                                      MachineBasicBlock::iterator B,
+                                      MachineBasicBlock::iterator E) {
+  // Scan DBG_VALUE and modify virtual registers with known locals.
+  // Stop at first non-DBG_VALUE instruction.
+  for (auto I = B; I != E && I->isDebugInstr();) {
+    MachineInstr &MI = *I++;
+    for (MachineOperand &MO : reverse(MI.uses())) {
+      if (!MO.isReg())
+        continue;
+
+      unsigned OldReg = MO.getReg();
+      auto I = Reg2Local.find(OldReg);
+      if (I == Reg2Local.end())
+        continue;
+
+      unsigned LocalId = I->second;
+      MO.ChangeToTargetIndex(llvm::WebAssembly::TI_LOCAL_START, LocalId);
+    }
+  }
+}
+
+static void fixupFollowingDebugValues(unsigned Reg, unsigned LocalId,
+                                      MachineRegisterInfo &MRI,
+                                      MachineBasicBlock::iterator B,
+                                      MachineBasicBlock::iterator E) {
+  // Scan DBG_VALUE and modify the specified virtual registers with the local.
+  // Stop at first non-DBG_VALUE instruction.
+  for (auto I = B; I != E && I->isDebugInstr();) {
+    MachineInstr &MI = *I++;
+    for (MachineOperand &MO : reverse(MI.uses())) {
+      if (!MO.isReg() || MO.getReg() != Reg)
+        continue;
+      MO.ChangeToTargetIndex(llvm::WebAssembly::TI_LOCAL_START, LocalId);
+    }
+  }
+}
+
 /// Given a MachineOperand of a stackified vreg, return the instruction at the
 /// start of the expression tree.
 static MachineInstr *findStartOfTree(MachineOperand &MO,
@@ -262,6 +301,11 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
             .addImm(LocalId)
             .addReg(MI.getOperand(2).getReg());
 
+        auto Next = std::next(MachineBasicBlock::iterator(&MI));
+        fixupFollowingDebugValues(Reg2Local, MRI, Next, MBB.end());
+        fixupFollowingDebugValues(MI.getOperand(0).getReg(), LocalId, MRI, Next,
+                                  MBB.end());
+
         MI.eraseFromParent();
         Changed = true;
         continue;
@@ -294,6 +338,8 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
             BuildMI(MBB, InsertPt, MI.getDebugLoc(), TII->get(Opc))
                 .addImm(LocalId)
                 .addReg(NewReg);
+            fixupFollowingDebugValues(NewReg, LocalId, MRI, InsertPt,
+                                      MBB.end());
           }
           MI.getOperand(0).setReg(NewReg);
           // This register operand is now being used by the inserted drop
@@ -301,6 +347,9 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
           MI.getOperand(0).setIsDead(false);
           MFI.stackifyVReg(NewReg);
           Changed = true;
+
+          fixupFollowingDebugValues(Reg2Local, MRI, InsertPt, MBB.end());
+
         }
       }
 
@@ -353,6 +402,8 @@ bool WebAssemblyExplicitLocals::runOnMachineFunction(MachineFunction &MF) {
         MO.setReg(NewReg);
         MFI.stackifyVReg(NewReg);
         Changed = true;
+
+        fixupFollowingDebugValues(OldReg, LocalId, MRI, InsertPt, MBB.end());
       }
 
       // Coalesce and eliminate COPY instructions.

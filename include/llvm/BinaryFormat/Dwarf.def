@@ -627,6 +627,8 @@ HANDLE_DW_OP(0xfb, GNU_addr_index, 0, GNU)
 HANDLE_DW_OP(0xfc, GNU_const_index, 0, GNU)
 
 // DWARF languages.
+// Extensions for WebAssembly.
+HANDLE_DW_OP(0xed, WASM_location, 0, WASM)
 HANDLE_DW_LANG(0x0001, C89, 2, DWARF)
 HANDLE_DW_LANG(0x0002, C, 2, DWARF)
 HANDLE_DW_LANG(0x0003, Ada83, 2, DWARF)
