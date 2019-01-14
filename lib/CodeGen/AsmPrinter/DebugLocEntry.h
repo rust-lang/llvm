@@ -21,6 +21,19 @@
 namespace llvm {
 class AsmPrinter;
 
+struct TargetIndexLocation {
+  int Index;
+  int Offset;
+
+  TargetIndexLocation() = default;
+  TargetIndexLocation(unsigned Idx, int64_t Offset)
+      : Index(Idx), Offset(Offset) {}
+
+  bool operator==(const TargetIndexLocation &Other) const {
+    return Index == Other.Index && Offset == Other.Offset;
+  }
+};
+
 /// This struct describes location entries emitted in the .debug_loc
 /// section.
 class DebugLocEntry {
@@ -47,12 +60,20 @@ public:
         : Expression(Expr), EntryKind(E_Location), Loc(Loc) {
       assert(cast<DIExpression>(Expr)->isValid());
     }
+    Value(const DIExpression *Expr, TargetIndexLocation Loc)
+        : Expression(Expr), EntryKind(E_TargetIndexLocation), TIL(Loc) {}
 
     /// Any complex address location expression for this Value.
     const DIExpression *Expression;
 
     /// Type of entry that this represents.
-    enum EntryType { E_Location, E_Integer, E_ConstantFP, E_ConstantInt };
+    enum EntryType {
+      E_Location,
+      E_Integer,
+      E_ConstantFP,
+      E_ConstantInt,
+      E_TargetIndexLocation
+    };
     enum EntryType EntryKind;
 
     /// Either a constant,
@@ -62,10 +83,17 @@ public:
       const ConstantInt *CIP;
     } Constant;
 
-    // Or a location in the machine frame.
-    MachineLocation Loc;
+    union {
+      // Or a location in the machine frame.
+      MachineLocation Loc;
+      // Or a location from target specific location.
+      TargetIndexLocation TIL;
+    };
 
     bool isLocation() const { return EntryKind == E_Location; }
+    bool isTargetIndexLocation() const {
+      return EntryKind == E_TargetIndexLocation;
+    }
     bool isInt() const { return EntryKind == E_Integer; }
     bool isConstantFP() const { return EntryKind == E_ConstantFP; }
     bool isConstantInt() const { return EntryKind == E_ConstantInt; }
@@ -73,6 +101,7 @@ public:
     const ConstantFP *getConstantFP() const { return Constant.CFP; }
     const ConstantInt *getConstantInt() const { return Constant.CIP; }
     MachineLocation getLoc() const { return Loc; }
+    TargetIndexLocation getTargetIndexLocation() const { return TIL; }
     bool isFragment() const { return getExpression()->isFragment(); }
     const DIExpression *getExpression() const { return Expression; }
     friend bool operator==(const Value &, const Value &);
@@ -165,6 +194,8 @@ inline bool operator==(const DebugLocEntry::Value &A,
   switch (A.EntryKind) {
   case DebugLocEntry::Value::E_Location:
     return A.Loc == B.Loc;
+  case DebugLocEntry::Value::E_TargetIndexLocation:
+    return A.TIL == B.TIL;
   case DebugLocEntry::Value::E_Integer:
     return A.Constant.Int == B.Constant.Int;
   case DebugLocEntry::Value::E_ConstantFP:

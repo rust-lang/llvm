@@ -340,13 +340,24 @@ DIE &DwarfCompileUnit::updateSubprogramScopeDIE(const DISubprogram *SP) {
 
   // Only include DW_AT_frame_base in full debug info
   if (!includeMinimalInlineScopes()) {
-    if (Asm->MF->getTarget().getTargetTriple().isNVPTX()) {
+    const TargetRegisterInfo *RI = Asm->MF->getSubtarget().getRegisterInfo();
+    auto FBL = RI->getFrameBaseLocation(*Asm->MF);
+    if (FBL.Kind == FrameBaseLocation::CFA) {
       DIELoc *Loc = new (DIEValueAllocator) DIELoc;
       addUInt(*Loc, dwarf::DW_FORM_data1, dwarf::DW_OP_call_frame_cfa);
       addBlock(*SPDie, dwarf::DW_AT_frame_base, Loc);
+    } else if (FBL.Kind == FrameBaseLocation::TargetIndex) {
+      if (FBL.TI.Offset >= 0) {
+        DIELoc *Loc = new (DIEValueAllocator) DIELoc;
+        DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
+        DIExpressionCursor Cursor({});
+        DwarfExpr.addTargetIndexLocation(FBL.TI.Index, FBL.TI.Offset);
+        DwarfExpr.addExpression(std::move(Cursor));
+        addBlock(*SPDie, dwarf::DW_AT_frame_base, DwarfExpr.finalize());
+      }
     } else {
-      const TargetRegisterInfo *RI = Asm->MF->getSubtarget().getRegisterInfo();
-      MachineLocation Location(RI->getFrameRegister(*Asm->MF));
+      assert(FBL.Kind == FrameBaseLocation::Register);
+      MachineLocation Location(FBL.Reg);
       if (RI->isPhysicalRegister(Location.getReg()))
         addAddress(*SPDie, dwarf::DW_AT_frame_base, Location);
     }
@@ -1023,7 +1034,7 @@ void DwarfCompileUnit::addVariableAddress(const DbgVariable &DV, DIE &Die,
 
 /// Add an address attribute to a die based on the location provided.
 void DwarfCompileUnit::addAddress(DIE &Die, dwarf::Attribute Attribute,
-                                  const MachineLocation &Location) {
+				  const MachineLocation &Location) {
   DIELoc *Loc = new (DIEValueAllocator) DIELoc;
   DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
   if (Location.isIndirect())

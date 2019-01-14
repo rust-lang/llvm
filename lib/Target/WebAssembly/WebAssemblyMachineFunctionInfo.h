@@ -53,7 +53,7 @@ class WebAssemblyFunctionInfo final : public MachineFunctionInfo {
   unsigned BasePtrVreg = -1U;
 
 public:
-  explicit WebAssemblyFunctionInfo(MachineFunction &MF) : MF(MF) {}
+  explicit WebAssemblyFunctionInfo(MachineFunction &MF) : MF(MF), SPVReg(WebAssembly::NoRegister) {}
   ~WebAssemblyFunctionInfo() override;
 
   void addParam(MVT VT) { Params.push_back(VT); }
@@ -118,6 +118,9 @@ public:
     assert(Reg & INT32_MIN);
     return Reg & INT32_MAX;
   }
+
+  unsigned SPVReg;
+  unsigned SPLocal;
 };
 
 void ComputeLegalValueVTs(const Function &F, const TargetMachine &TM, Type *Ty,
