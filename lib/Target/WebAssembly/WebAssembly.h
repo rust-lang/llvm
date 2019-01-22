@@ -86,10 +86,6 @@ namespace WebAssembly {
 enum TargetIndex { TI_LOCAL_START, TI_GLOBAL_START, TI_OPERAND_STACK_START };
 } // end namespace WebAssembly
 
-namespace WebAssembly {
-enum TargetIndex { TI_LOCAL_START, TI_GLOBAL_START, TI_OPERAND_STACK_START };
-} // end namespace WebAssembly
-
 } // end namespace llvm
 
 #endif
